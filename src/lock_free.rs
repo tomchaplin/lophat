@@ -108,9 +108,9 @@ mod tests {
 
     proptest! {
         #[test]
-        fn lockfree_agrees_with_serial( matrix in sut_matrix(30) ) {
+        fn lockfree_agrees_with_serial( matrix in sut_matrix(300) ) {
             let serial_dgm = rv_decompose(matrix.iter().cloned()).diagram();
-            let parallel_dgm = rv_decompose_lock_free(matrix.iter().cloned()).diagram();
+            let parallel_dgm = rv_decompose_lock_free(matrix.into_iter()).diagram();
             assert_eq!(serial_dgm, parallel_dgm);
         }
     }
@@ -126,6 +126,7 @@ mod tests {
 
     fn veccolum_with_idxs_below(mut max_idx: usize) -> impl Strategy<Value = VecColumn> {
         // Avoid empty range problem
+        // Always returns empty Vec because size is in 0..1 == { 0 }
         if max_idx == 0 {
             max_idx = 1;
         }
