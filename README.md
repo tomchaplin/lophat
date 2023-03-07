@@ -27,7 +27,16 @@ The only changes from the algorithm described in [[1]](#1) are:
 
 ## Usage
 
-## Tests
+## TODO
+
+- [ ] Implement clearing optimisation when V not required
+- [ ] Increase property testing
+- [ ] Write unit tests
+- [ ] Write documentation (Rust + Python)
+- [ ] Include small Python example script
+- [ ] Finish writing README
+- [ ] Add alternative column representations
+- [ ] Abstract out matrix trait
 
 ## References
 
