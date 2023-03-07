@@ -20,6 +20,11 @@ As such, you should expect LoPHAT to under-perform as compared to [giotto-ph [2]
 > The implementation is not optimised, the API is not fixed and no tests have been written.
 > Use at your own risk.
 
+The only changes from the algorithm described in [[1]](#1) are:
+* We use the `pinboard` library for memory managment of the matrices.
+* We store the $j^{th}$ column of $R$ and $V$ alongside each other in memory, allowing a full $R=DV$ decomposition (rather than just computing pairings).
+* Rather than split the matrix into chunks, we use a work-stealing paradigm, via the `rayon` library.
+
 ## References
 
 <a id="1">[1]</a> Morozov, Dmitriy, and Arnur Nigmetov.
