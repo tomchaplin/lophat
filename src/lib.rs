@@ -12,11 +12,11 @@ pub use lock_free::rv_decompose_lock_free;
 
 #[pyfunction]
 fn compute_pairings_serial(matrix: &PyIterator) -> PersistenceDiagram {
-    rv_decompose(matrix.into_iter().map(|col| {
+    rv_decompose(matrix.map(|col| {
         VecColumn {
             internal: col
                 .and_then(PyAny::extract::<Vec<usize>>)
-                .expect("Column is a vector of unsigned integers"),
+                .expect("Column is a list of unsigned integers"),
         }
     }))
     .diagram()
@@ -24,11 +24,11 @@ fn compute_pairings_serial(matrix: &PyIterator) -> PersistenceDiagram {
 
 #[pyfunction]
 fn compute_pairings(matrix: &PyIterator) -> PersistenceDiagram {
-    rv_decompose_lock_free(matrix.into_iter().map(|col| {
+    rv_decompose_lock_free(matrix.map(|col| {
         VecColumn {
             internal: col
                 .and_then(PyAny::extract::<Vec<usize>>)
-                .expect("Column is a vector of unsigned integers"),
+                .expect("Column is a list of unsigned integers"),
         }
     }))
     .diagram()
