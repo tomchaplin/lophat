@@ -96,3 +96,43 @@ pub fn rv_decompose_lock_free<C: Column + Debug + 'static>(
     let (r, v) = matrix.into_iter().map(|pinboard| pinboard.read()).unzip();
     RVDecomposition { r, v }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use crate::column::VecColumn;
+    use crate::rv_decompose;
+    use proptest::collection::hash_set;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn lockfree_agrees_with_serial( matrix in sut_matrix(30) ) {
+            let serial_dgm = rv_decompose(matrix.iter().cloned()).diagram();
+            let parallel_dgm = rv_decompose_lock_free(matrix.iter().cloned()).diagram();
+            assert_eq!(serial_dgm, parallel_dgm);
+        }
+    }
+
+    // Generates a strict upper triangular matrix of VecColumns with given size
+    fn sut_matrix(size: usize) -> impl Strategy<Value = Vec<VecColumn>> {
+        let mut matrix = vec![];
+        for i in 1..size {
+            matrix.push(veccolum_with_idxs_below(i));
+        }
+        matrix
+    }
+
+    fn veccolum_with_idxs_below(mut max_idx: usize) -> impl Strategy<Value = VecColumn> {
+        // Avoid empty range problem
+        if max_idx == 0 {
+            max_idx = 1;
+        }
+        hash_set(0..max_idx, 0..max_idx).prop_map(|set| {
+            let mut internal: Vec<_> = set.into_iter().collect();
+            internal.sort();
+            VecColumn { internal }
+        })
+    }
+}

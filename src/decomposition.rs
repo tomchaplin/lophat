@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 #[pyclass]
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct PersistenceDiagram {
     #[pyo3(get)]
     unpaired: HashSet<usize>,
