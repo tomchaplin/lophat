@@ -9,9 +9,9 @@
 ## Overview
 
 LoPHAT is a Rust library implementing the lockfree algorithm for computing persistent homology (PH), introduced in [[1]](#1).
-Python bindings are provided via PyO3, with an interface familiar to PHAT's.
+Python bindings are provided via PyO3, with an interface familiar to those who have used PHAT.
 
-The goal of this library is to make the algorithm accessible to those wishing to compute PH of arbitrary filtered chain complexes.
+The primary goal of this library is to make the algorithm accessible to those wishing to compute PH of ___arbitrary filtered chain complexes___.
 In particular, LoPHAT is **not** specialised to compute PH of common filtrations or even filtered simplicial complexes.
 As such, you should expect LoPHAT to under-perform as compared to [giotto-ph [2]](#2) or [oineus  [3]](#3), both of which use the algorithm of [[1]](#1).
 
