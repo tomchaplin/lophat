@@ -1,0 +1,15 @@
+[package]
+name = "lophat"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "lophat"
+crate-type = ["cdylib"]
+
+[dependencies]
+crossbeam = "0.8.2"
+pinboard = "2.1.0"
+pyo3 = "0.18.1"
+rayon = "1.7.0"
