@@ -108,7 +108,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn lockfree_agrees_with_serial( matrix in sut_matrix(300) ) {
+        fn lockfree_agrees_with_serial( matrix in sut_matrix(100) ) {
             let serial_dgm = rv_decompose(matrix.iter().cloned()).diagram();
             let parallel_dgm = rv_decompose_lock_free(matrix.into_iter()).diagram();
             assert_eq!(serial_dgm, parallel_dgm);

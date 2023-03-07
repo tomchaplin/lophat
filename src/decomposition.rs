@@ -1,6 +1,8 @@
 use crate::Column;
+use hashbrown::HashSet;
 use pyo3::prelude::*;
-use std::collections::{HashMap, HashSet};
+use rayon::prelude::*;
+use std::{collections::HashMap, sync::Mutex};
 
 #[pyclass]
 #[derive(Default, Debug, Clone, PartialEq)]
@@ -8,7 +10,7 @@ pub struct PersistenceDiagram {
     #[pyo3(get)]
     unpaired: HashSet<usize>,
     #[pyo3(get)]
-    paired: Vec<(usize, usize)>,
+    paired: HashSet<(usize, usize)>,
 }
 
 #[derive(Debug, Default)]
@@ -47,18 +49,22 @@ impl<C: Column> RVDecomposition<C> {
     }
 
     pub fn diagram(&self) -> PersistenceDiagram {
-        let mut diagram = PersistenceDiagram::default();
-        for (idx, col) in self.r.iter().enumerate() {
-            if let Some(lowest_idx) = col.pivot() {
-                // Negative column
-                diagram.unpaired.remove(&lowest_idx);
-                diagram.paired.push((lowest_idx, idx))
-            } else {
-                // Positive column
-                diagram.unpaired.insert(idx);
-            }
+        let unpaired = Mutex::new((0..self.r.len()).collect::<HashSet<usize>>());
+        let paired = self
+            .r
+            .par_iter()
+            .enumerate()
+            .filter_map(|(idx, col)| {
+                let lowest_idx = col.pivot()?;
+                // Negative column, remove positive from unpaired
+                unpaired.lock().unwrap().remove(&lowest_idx);
+                Some((lowest_idx, idx))
+            })
+            .collect();
+        PersistenceDiagram {
+            unpaired: unpaired.into_inner().unwrap(),
+            paired,
         }
-        diagram
     }
 }
 

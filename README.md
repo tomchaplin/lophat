@@ -22,10 +22,12 @@ The only changes from the algorithm described in [[1]](#1) are:
 
 > **Warning**
 > LoPHAT is currently in alpha.
-> The implementation is not optimised, the API is not fixed and no tests have been written.
+> The implementation is not optimised, the API is not fixed and tests are limited.
 > Use at your own risk.
 
 ## Usage
+
+## Tests
 
 ## References
 
