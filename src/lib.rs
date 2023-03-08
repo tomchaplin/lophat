@@ -24,7 +24,7 @@ pub use lock_free::rv_decompose_lock_free;
 fn compute_pairings_serial(matrix: &PyIterator) -> PersistenceDiagram {
     rv_decompose(matrix.map(|col| {
         col.and_then(PyAny::extract::<Vec<usize>>)
-            .map(|c| VecColumn::from(c))
+            .map(VecColumn::from)
             .expect("Column is a list of unsigned integers")
     }))
     .diagram()
@@ -35,7 +35,7 @@ fn compute_pairings(matrix: &PyIterator) -> PersistenceDiagram {
     rv_decompose_lock_free(
         matrix.map(|col| {
             col.and_then(PyAny::extract::<Vec<usize>>)
-                .map(|c| VecColumn::from(c))
+                .map(VecColumn::from)
                 .expect("Column is a list of unsigned integers")
         }),
         None,
