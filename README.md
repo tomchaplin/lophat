@@ -35,6 +35,7 @@ This provides you with two functions, both of which return the diagram as a set 
 They both compute these pairings via $R=DV$ decomposition but via different algorithms
 * `compute_pairings_serial` - using standard algorithm, in serial;
 * `compute_pairings` - using the lockfree algorithm of [[1]](#1).
+
 For example usage, consult the file `example.py`
 
 ## TODO
