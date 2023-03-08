@@ -8,9 +8,9 @@ use std::collections::HashMap;
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct PersistenceDiagram {
     #[pyo3(get)]
-    unpaired: HashSet<usize>,
+    pub unpaired: HashSet<usize>,
     #[pyo3(get)]
-    paired: HashSet<(usize, usize)>,
+    pub paired: HashSet<(usize, usize)>,
 }
 
 #[derive(Debug, Default)]
