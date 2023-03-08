@@ -52,6 +52,7 @@ For example usage, consult the file `example.py`
 - [ ] Benchmark
 - [ ] Add alternative column representations
 - [ ] Abstract out matrix trait
+- [ ] Fix metadata files so that Rust toolchain is not needed for `pip` install
 
 ## References
 
