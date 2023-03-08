@@ -116,7 +116,7 @@ mod tests {
             vec![4, 5, 6],
         ]
         .into_iter()
-        .map(|internal| VecColumn { internal })
+        .map(|col| col.into())
     }
 
     #[test]

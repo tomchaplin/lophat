@@ -13,6 +13,8 @@ pub trait Column: Sync + Clone + Send + Default {
 }
 
 /// A [`Column`]-implementing struct, representing the column by an increasing vector of the non-zero indices.
+///
+/// To construct call [`VecColumn::from`].
 #[derive(Debug, Default, Clone)]
 pub struct VecColumn {
     pub internal: Vec<usize>,
@@ -58,5 +60,13 @@ impl Column for VecColumn {
         for entry in other.internal.iter() {
             working_idx = self.add_entry_starting_at(*entry, working_idx);
         }
+    }
+}
+
+impl From<Vec<usize>> for VecColumn {
+    /// Constructs a `VecColumn`, consuming `internal`, where
+    /// `internal` is the vector of non-zero indices, sorted in increasing order.
+    fn from(internal: Vec<usize>) -> Self {
+        Self { internal }
     }
 }

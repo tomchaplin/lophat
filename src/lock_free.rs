@@ -139,9 +139,9 @@ mod tests {
             max_idx = 1;
         }
         hash_set(0..max_idx, 0..max_idx).prop_map(|set| {
-            let mut internal: Vec<_> = set.into_iter().collect();
-            internal.sort();
-            VecColumn { internal }
+            let mut col: Vec<_> = set.into_iter().collect();
+            col.sort();
+            VecColumn::from(col)
         })
     }
 }
