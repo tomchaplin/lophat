@@ -77,6 +77,7 @@ fn reduce_column<C: Column>(
 
 pub fn rv_decompose_lock_free<C: Column + Debug + 'static>(
     matrix: impl Iterator<Item = C>,
+    column_height: Option<usize>,
 ) -> RVDecomposition<C> {
     let matrix: Vec<_> = matrix
         .enumerate()
@@ -86,7 +87,8 @@ pub fn rv_decompose_lock_free<C: Column + Debug + 'static>(
             NonEmptyPinboard::new((r_col, v_col))
         })
         .collect();
-    let pivots: Vec<_> = (0..matrix.len()).map(|_| AtomicCell::new(None)).collect();
+    let column_height = column_height.unwrap_or(matrix.len());
+    let pivots: Vec<_> = (0..column_height).map(|_| AtomicCell::new(None)).collect();
     // Reduce matrix
     // TODO: Can we advice rayon to split work in chunks?
     (0..matrix.len())
@@ -110,7 +112,7 @@ mod tests {
         #[test]
         fn lockfree_agrees_with_serial( matrix in sut_matrix(100) ) {
             let serial_dgm = rv_decompose(matrix.iter().cloned()).diagram();
-            let parallel_dgm = rv_decompose_lock_free(matrix.into_iter()).diagram();
+            let parallel_dgm = rv_decompose_lock_free(matrix.into_iter(), None).diagram();
             assert_eq!(serial_dgm, parallel_dgm);
         }
     }

@@ -23,13 +23,14 @@ fn compute_pairings_serial(matrix: &PyIterator) -> PersistenceDiagram {
 
 #[pyfunction]
 fn compute_pairings(matrix: &PyIterator) -> PersistenceDiagram {
-    rv_decompose_lock_free(matrix.map(|col| {
-        VecColumn {
+    rv_decompose_lock_free(
+        matrix.map(|col| VecColumn {
             internal: col
                 .and_then(PyAny::extract::<Vec<usize>>)
                 .expect("Column is a list of unsigned integers"),
-        }
-    }))
+        }),
+        None,
+    )
     .diagram()
 }
 
