@@ -55,7 +55,6 @@ impl<C: Column> RVDecomposition<C> {
             .enumerate()
             .filter_map(|(idx, col)| {
                 let lowest_idx = col.pivot()?;
-                // Negative column, remove positive from unpaired
                 Some((lowest_idx, idx))
             })
             .collect();
