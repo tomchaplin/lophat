@@ -4,6 +4,11 @@
 
 <b>Lo</b>ckfree <b>P</b>ersistent <b>H</b>omology <b>A</b>lgorithm <b>T</b>oolbox
 
+[![crates.io](https://img.shields.io/crates/v/lophat)](https://crates.io/crates/lophat)
+[![PyPi](https://img.shields.io/pypi/v/lophat)](https://pypi.org/project/lophat/)
+[![docs.rs](https://img.shields.io/docsrs/lophat?label=Docs.rs)](https://docs.rs/lophat/latest/lophat/)
+[![Read the Docs](https://img.shields.io/readthedocs/lophat?label=Read%20The%20Docs)]()
+
 </div>
 
 ## Overview
