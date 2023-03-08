@@ -43,10 +43,8 @@ For example usage, consult the file `example.py`
 - [ ] Implement clearing optimisation when V not required
 - [ ] Increase property testing
 - [ ] Write unit tests
-- [ ] Write documentation (Rust + Python)
+- [ ] Write Python documentation
 - [ ] Benchmark
-- [ ] Include small Python example script
-- [ ] Finish writing README
 - [ ] Add alternative column representations
 - [ ] Abstract out matrix trait
 
