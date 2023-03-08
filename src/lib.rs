@@ -1,4 +1,3 @@
-use column::VecColumn;
 use pyo3::prelude::*;
 use pyo3::types::PyIterator;
 
@@ -6,7 +5,7 @@ mod column;
 mod decomposition;
 mod lock_free;
 
-pub use column::Column;
+pub use column::{Column, VecColumn};
 pub use decomposition::{rv_decompose, PersistenceDiagram, RVDecomposition};
 pub use lock_free::rv_decompose_lock_free;
 
