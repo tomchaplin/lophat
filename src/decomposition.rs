@@ -4,6 +4,8 @@ use pyo3::prelude::*;
 use rayon::prelude::*;
 use std::collections::HashMap;
 
+/// Stores the pairings from a matrix decomposition,
+/// as well as those columns which did not appear in a pairing.
 #[pyclass]
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct PersistenceDiagram {
@@ -13,6 +15,7 @@ pub struct PersistenceDiagram {
     pub paired: HashSet<(usize, usize)>,
 }
 
+/// Stores the matrices R and V resulting from and R=DV decomposition as vectors of structs implementing [`Column`].
 #[derive(Debug, Default)]
 pub struct RVDecomposition<C: Column> {
     pub r: Vec<C>,
@@ -25,8 +28,17 @@ fn col_idx_with_same_low<C: Column>(col: &C, low_inverse: &HashMap<usize, usize>
 }
 
 impl<C: Column> RVDecomposition<C> {
-    // Receives column, reduces it with left-to-right addition from R
-    // Adds reduction to self
+    /// Uses the decomposition so far to reduce the next column of D.
+    /// 1. Receives `column`, assumed to be the next column of D.
+    /// 2. Reduces it with left-to-right addition from R.
+    /// 3. Pushes the reduced column to R and the correct corrsponding column to V to maintain a R=DV decomposition.
+    /// 4. Updates low_invese if the reduced column is non-zero.
+    ///
+    /// Note: `low_inverse` should be a mainted list of pivots so that if `self.r[j]` is non-empty then
+    /// ```
+    /// low_inverse.get(&self.r[j].pivot().unwrap()) == j
+    /// ```
+    /// If you pass the same `HashMap` into `reduce_column` every time, it will maintain this map.
     pub fn reduce_column(&mut self, mut column: C, low_inverse: &mut HashMap<usize, usize>) {
         // v_col tracks how the final reduced column is built up
         // Currently column contains 1 lot of the latest column in D
@@ -48,6 +60,8 @@ impl<C: Column> RVDecomposition<C> {
         self.v.push(v_col);
     }
 
+    /// Constructs a persistence diagram from the R=DV decomposition via the usual
+    /// algorithm, reading off lowest-ones.
     pub fn diagram(&self) -> PersistenceDiagram {
         let paired: HashSet<(usize, usize)> = self
             .r
@@ -67,6 +81,9 @@ impl<C: Column> RVDecomposition<C> {
     }
 }
 
+/// Decomposes the input matrix, using the standard, serial algorithm.
+///
+/// * `matrix` - iterator over columns of the matrix you wish to decompose.
 pub fn rv_decompose<C: Column>(matrix: impl Iterator<Item = C>) -> RVDecomposition<C> {
     let mut low_inverse = HashMap::new();
     matrix.fold(RVDecomposition::default(), |mut accum, next_col| {

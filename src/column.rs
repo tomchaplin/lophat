@@ -1,11 +1,18 @@
 use std::cmp::Ordering;
 
+/// Structs implementing `Column` represent columns of a `usize`-indexed matrix,
+/// over the field F_2.
 pub trait Column: Sync + Clone + Send + Default {
+    /// Returns the index of the lowest non-zero column, or `None` if the column is empty.
     fn pivot(&self) -> Option<usize>;
+    /// Adds one copy of `other` into `self`
     fn add_col(&mut self, other: &Self);
+    /// Should be equivalent to `self.add_col(e_entry)` where `e_entry` is the column
+    /// with all zeros except a 1 in index `entry`.
     fn add_entry(&mut self, entry: usize);
 }
 
+/// A [`Column`]-implementing struct, representing the column by an increasing vector of the non-zero indices.
 #[derive(Debug, Default, Clone)]
 pub struct VecColumn {
     pub internal: Vec<usize>,

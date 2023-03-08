@@ -75,6 +75,12 @@ fn reduce_column<C: Column>(
     }
 }
 
+/// Decomposes the input matrix, using the lockfree, parallel algoirhtm of Morozov and Nigmetov.
+///
+/// * `matrix` - iterator over columns of the matrix you wish to decompose.
+/// * `column_height` - an optional hint to the height of the columns.
+///   If `None`, assumed to be `matrix.collect().len()`.
+///   All indices must lie in the range `0..column_height`.
 pub fn rv_decompose_lock_free<C: Column + Debug + 'static>(
     matrix: impl Iterator<Item = C>,
     column_height: Option<usize>,
