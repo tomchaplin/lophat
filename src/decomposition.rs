@@ -2,7 +2,7 @@ use crate::Column;
 use hashbrown::HashSet;
 use pyo3::prelude::*;
 use rayon::prelude::*;
-use std::{collections::HashMap, sync::Mutex};
+use std::collections::HashMap;
 
 #[pyclass]
 #[derive(Default, Debug, Clone, PartialEq)]
@@ -49,22 +49,22 @@ impl<C: Column> RVDecomposition<C> {
     }
 
     pub fn diagram(&self) -> PersistenceDiagram {
-        let unpaired = Mutex::new((0..self.r.len()).collect::<HashSet<usize>>());
-        let paired = self
+        let paired: HashSet<(usize, usize)> = self
             .r
             .par_iter()
             .enumerate()
             .filter_map(|(idx, col)| {
                 let lowest_idx = col.pivot()?;
                 // Negative column, remove positive from unpaired
-                unpaired.lock().unwrap().remove(&lowest_idx);
                 Some((lowest_idx, idx))
             })
             .collect();
-        PersistenceDiagram {
-            unpaired: unpaired.into_inner().unwrap(),
-            paired,
+        let mut unpaired: HashSet<usize> = (0..self.r.len()).collect();
+        for (birth, death) in paired.iter() {
+            unpaired.remove(birth);
+            unpaired.remove(death);
         }
+        PersistenceDiagram { unpaired, paired }
     }
 }
 
