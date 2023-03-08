@@ -74,3 +74,42 @@ pub fn rv_decompose<C: Column>(matrix: impl Iterator<Item = C>) -> RVDecompositi
         accum
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::column::VecColumn;
+
+    use super::*;
+
+    fn build_sphere_triangulation() -> impl Iterator<Item = VecColumn> {
+        vec![
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![0, 1],
+            vec![0, 2],
+            vec![1, 2],
+            vec![0, 3],
+            vec![1, 3],
+            vec![2, 3],
+            vec![4, 7, 8],
+            vec![5, 7, 9],
+            vec![6, 8, 9],
+            vec![4, 5, 6],
+        ]
+        .into_iter()
+        .map(|internal| VecColumn { internal })
+    }
+
+    #[test]
+    fn sphere_triangulation_correct() {
+        let matrix = build_sphere_triangulation();
+        let correct_diagram = PersistenceDiagram {
+            unpaired: HashSet::from_iter(vec![0, 13]),
+            paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
+        };
+        let computed_diagram = rv_decompose(matrix).diagram();
+        assert_eq!(computed_diagram, correct_diagram)
+    }
+}
