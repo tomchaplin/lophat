@@ -25,7 +25,17 @@ The only changes from the algorithm described in [[1]](#1) are:
 > The implementation is not optimised, the API is not fixed and tests are limited.
 > Use at your own risk.
 
-## Usage
+## Usage in Python
+
+The Python bindings can be installed via
+```shell
+pip install lophat
+```
+This provides you with two functions, both of which return the diagram as a set of paired columns and a set of unpaired columns.
+They both compute these pairings via $R=DV$ decomposition but via different algorithms
+* `compute_pairings_serial` - using standard algorithm, in serial;
+* `compute_pairings` - using the lockfree algorithm of [[1]](#1).
+For example usage, consult the file `example.py`
 
 ## TODO
 
@@ -33,6 +43,7 @@ The only changes from the algorithm described in [[1]](#1) are:
 - [ ] Increase property testing
 - [ ] Write unit tests
 - [ ] Write documentation (Rust + Python)
+- [ ] Benchmark
 - [ ] Include small Python example script
 - [ ] Finish writing README
 - [ ] Add alternative column representations
