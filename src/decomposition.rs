@@ -35,7 +35,7 @@ impl<C: Column> RVDecomposition<C> {
     /// 4. Updates low_invese if the reduced column is non-zero.
     ///
     /// Note: `low_inverse` should be a mainted list of pivots so that if `self.r[j]` is non-empty then
-    /// ```
+    /// ```ignore
     /// low_inverse.get(&self.r[j].pivot().unwrap()) == j
     /// ```
     /// If you pass the same `HashMap` into `reduce_column` every time, it will maintain this map.
