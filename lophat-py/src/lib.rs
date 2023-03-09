@@ -2,27 +2,22 @@ use ::lophat::{rv_decompose, rv_decompose_lock_free, PersistenceDiagram, VecColu
 use pyo3::prelude::*;
 use pyo3::types::PyIterator;
 
-#[pyfunction]
-fn compute_pairings_serial(matrix: &PyIterator) -> PersistenceDiagram {
-    rv_decompose(matrix.map(|col| {
+fn matrix_from_pyiterator<'a>(matrix: &'a PyIterator) -> impl Iterator<Item = VecColumn> + 'a {
+    matrix.map(|col| {
         col.and_then(PyAny::extract::<Vec<usize>>)
             .map(VecColumn::from)
             .expect("Column is a list of unsigned integers")
-    }))
-    .diagram()
+    })
+}
+
+#[pyfunction]
+fn compute_pairings_serial(matrix: &PyIterator) -> PersistenceDiagram {
+    rv_decompose(matrix_from_pyiterator(matrix)).diagram()
 }
 
 #[pyfunction]
 fn compute_pairings(matrix: &PyIterator) -> PersistenceDiagram {
-    rv_decompose_lock_free(
-        matrix.map(|col| {
-            col.and_then(PyAny::extract::<Vec<usize>>)
-                .map(VecColumn::from)
-                .expect("Column is a list of unsigned integers")
-        }),
-        None,
-    )
-    .diagram()
+    rv_decompose_lock_free(matrix_from_pyiterator(matrix), None).diagram()
 }
 
 /// A Python module implemented in Rust.
