@@ -147,7 +147,9 @@ dependencies = [
 
 [[package]]
 name = "lophat"
-version = "0.2.0"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3efafc9cbcb79d5201bd0c5765057851ef705150e166daafb902d03eb38253db"
 dependencies = [
  "crossbeam",
  "hashbrown",
@@ -158,7 +160,7 @@ dependencies = [
 
 [[package]]
 name = "lophat-py"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "lophat",
  "pyo3",
