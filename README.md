@@ -36,12 +36,17 @@ The Python bindings can be installed via
 ```shell
 pip install lophat
 ```
+If this fails, it is probably `pip` trying to install from source without a `cargo` toolchain present.
+To force installing from binary run
+```shell
+pip install --only-binary lophat lophat
+```
 This provides you with two functions, both of which return the diagram as a set of paired columns and a set of unpaired columns.
 They both compute these pairings via $R=DV$ decomposition but via different algorithms
 * `compute_pairings_serial` - using standard algorithm, in serial;
 * `compute_pairings` - using the lockfree algorithm of [[1]](#1).
 
-For example usage, consult the file `example.py`
+For example usage, consult the file `example.py` or [this Google colab notebook](https://colab.research.google.com/drive/1y0_wZfvuUZfRreYPO50mo4rBlflkMcfj?usp=sharing)
 
 ## TODO
 
