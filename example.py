@@ -19,7 +19,7 @@ matrix = [
 ]
 
 # Note we pass iter(matrix)
-# Pass in 0 to specify that we want to use 4 threads
+# Specify that we want to use 4 threads
 dgm_par = compute_pairings(iter(matrix), num_threads=4)
 dgm_serial = compute_pairings_serial(iter(matrix))
 
