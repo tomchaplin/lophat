@@ -1,6 +1,7 @@
 use crate::Column;
 use rayon::prelude::IntoParallelIterator;
 
+/// Unused.
 pub trait Matrix<C: Column>: IntoIterator<Item = C> + IntoParallelIterator<Item = C> {
     fn get_col(&self, index: usize) -> C;
     fn set_col(&mut self, index: usize, col: C);

@@ -1,4 +1,4 @@
-use crate::Column;
+use crate::{Column, LoPhatOptions};
 use hashbrown::HashSet;
 use pyo3::prelude::*;
 use rayon::prelude::*;
@@ -19,7 +19,7 @@ pub struct PersistenceDiagram {
 #[derive(Debug, Default)]
 pub struct RVDecomposition<C: Column> {
     pub r: Vec<C>,
-    pub v: Vec<C>,
+    pub v: Option<Vec<C>>,
 }
 
 fn col_idx_with_same_low<C: Column>(col: &C, low_inverse: &HashMap<usize, usize>) -> Option<usize> {
@@ -42,12 +42,21 @@ impl<C: Column> RVDecomposition<C> {
     pub fn reduce_column(&mut self, mut column: C, low_inverse: &mut HashMap<usize, usize>) {
         // v_col tracks how the final reduced column is built up
         // Currently column contains 1 lot of the latest column in D
-        let mut v_col = C::default();
-        v_col.add_entry(self.r.len());
+        let maintain_v = self.v.is_some();
+        let mut v_col: Option<C> = None;
+        if maintain_v {
+            let mut v_col = Some(C::default());
+            v_col.as_mut().unwrap().add_entry(self.r.len());
+        }
         // Reduce the column, keeping track of how we do this in V
         while let Some(col_idx) = col_idx_with_same_low(&column, &low_inverse) {
             column.add_col(&self.r[col_idx]);
-            v_col.add_col(&self.v[col_idx]);
+            if maintain_v {
+                v_col
+                    .as_mut()
+                    .unwrap()
+                    .add_col(&self.v.as_mut().unwrap()[col_idx]);
+            }
         }
         // Update low inverse
         let final_pivot = column.pivot();
@@ -57,7 +66,9 @@ impl<C: Column> RVDecomposition<C> {
         }
         // Push to decomposition
         self.r.push(column);
-        self.v.push(v_col);
+        if maintain_v {
+            self.v.as_mut().unwrap().push(v_col.unwrap());
+        }
     }
 
     /// Constructs a persistence diagram from the R=DV decomposition via the usual
@@ -84,9 +95,20 @@ impl<C: Column> RVDecomposition<C> {
 /// Decomposes the input matrix, using the standard, serial algorithm.
 ///
 /// * `matrix` - iterator over columns of the matrix you wish to decompose.
-pub fn rv_decompose<C: Column>(matrix: impl Iterator<Item = C>) -> RVDecomposition<C> {
+pub fn rv_decompose<C: Column>(
+    matrix: impl Iterator<Item = C>,
+    options: LoPhatOptions,
+) -> RVDecomposition<C> {
     let mut low_inverse = HashMap::new();
-    matrix.fold(RVDecomposition::default(), |mut accum, next_col| {
+    let init_rv = if options.maintain_v {
+        RVDecomposition {
+            r: vec![],
+            v: Some(vec![]),
+        }
+    } else {
+        RVDecomposition { r: vec![], v: None }
+    };
+    matrix.fold(init_rv, |mut accum, next_col| {
         accum.reduce_column(next_col, &mut low_inverse);
         accum
     })
@@ -126,7 +148,11 @@ mod tests {
             unpaired: HashSet::from_iter(vec![0, 13]),
             paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
         };
-        let computed_diagram = rv_decompose(matrix).diagram();
+        let options = LoPhatOptions {
+            maintain_v: false,
+            num_threads: 0,
+        };
+        let computed_diagram = rv_decompose(matrix, options).diagram();
         assert_eq!(computed_diagram, correct_diagram)
     }
 }

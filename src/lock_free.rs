@@ -1,18 +1,20 @@
 use std::fmt::Debug;
 
 use crate::Column;
+use crate::LoPhatOptions;
 use crate::RVDecomposition;
 
 use crossbeam::atomic::AtomicCell;
 use pinboard::NonEmptyPinboard;
 use rayon::prelude::*;
+use rayon::ThreadPoolBuilder;
 
 // Implements do while loop lines 6-9
 fn get_col_with_pivot<C: Column>(
     l: usize,
-    matrix: &Vec<NonEmptyPinboard<(C, C)>>,
+    matrix: &Vec<NonEmptyPinboard<(C, Option<C>)>>,
     pivots: &Vec<AtomicCell<Option<usize>>>,
-) -> Option<(usize, (C, C))> {
+) -> Option<(usize, (C, Option<C>))> {
     loop {
         let piv = pivots[l].load();
         if let Some(piv) = piv {
@@ -32,7 +34,7 @@ fn get_col_with_pivot<C: Column>(
 
 fn reduce_column<C: Column>(
     j: usize,
-    matrix: &Vec<NonEmptyPinboard<(C, C)>>,
+    matrix: &Vec<NonEmptyPinboard<(C, Option<C>)>>,
     pivots: &Vec<AtomicCell<Option<usize>>>,
 ) {
     let mut working_j = j;
@@ -44,7 +46,10 @@ fn reduce_column<C: Column>(
                 // Lines 17-24
                 if piv < working_j {
                     curr_column.0.add_col(&piv_column.0);
-                    curr_column.1.add_col(&piv_column.1);
+                    // Only add V columns if we need to
+                    if let Some(curr_v_col) = curr_column.1.as_mut() {
+                        curr_v_col.add_col(&piv_column.1.unwrap());
+                    }
                 } else if piv > working_j {
                     matrix[working_j].set(curr_column);
                     if pivots[l]
@@ -84,24 +89,52 @@ fn reduce_column<C: Column>(
 pub fn rv_decompose_lock_free<C: Column + Debug + 'static>(
     matrix: impl Iterator<Item = C>,
     column_height: Option<usize>,
+    options: LoPhatOptions,
 ) -> RVDecomposition<C> {
     let matrix: Vec<_> = matrix
         .enumerate()
         .map(|(idx, r_col)| {
-            let mut v_col = C::default();
-            v_col.add_entry(idx);
-            NonEmptyPinboard::new((r_col, v_col))
+            if options.maintain_v {
+                let mut v_col = C::default();
+                v_col.add_entry(idx);
+                NonEmptyPinboard::new((r_col, Some(v_col)))
+            } else {
+                NonEmptyPinboard::new((r_col, None))
+            }
         })
         .collect();
     let column_height = column_height.unwrap_or(matrix.len());
     let pivots: Vec<_> = (0..column_height).map(|_| AtomicCell::new(None)).collect();
+    // Setup thread pool
+    let thread_pool = ThreadPoolBuilder::new()
+        .num_threads(options.num_threads)
+        .build()
+        .expect("Failed to build thread pool");
     // Reduce matrix
     // TODO: Can we advice rayon to split work in chunks?
-    (0..matrix.len())
-        .into_par_iter()
-        .for_each(|j| reduce_column(j, &matrix, &pivots));
+    thread_pool.install(|| {
+        (0..matrix.len())
+            .into_par_iter()
+            .for_each(|j| reduce_column(j, &matrix, &pivots));
+    });
     // Wrap into RV decomposition
-    let (r, v) = matrix.into_iter().map(|pinboard| pinboard.read()).unzip();
+    let (r, v) = if options.maintain_v {
+        let (r_sub, v_sub) = matrix
+            .into_iter()
+            .map(|pinboard| pinboard.read())
+            .map(|(r_col, v_col)| (r_col, v_col.unwrap()))
+            .unzip();
+        (r_sub, Some(v_sub))
+    } else {
+        (
+            matrix
+                .into_iter()
+                .map(|pinboard| pinboard.read())
+                .map(|(r_col, _v_col)| r_col)
+                .collect(),
+            None,
+        )
+    };
     RVDecomposition { r, v }
 }
 
@@ -117,8 +150,9 @@ mod tests {
     proptest! {
         #[test]
         fn lockfree_agrees_with_serial( matrix in sut_matrix(100) ) {
-            let serial_dgm = rv_decompose(matrix.iter().cloned()).diagram();
-            let parallel_dgm = rv_decompose_lock_free(matrix.into_iter(), None).diagram();
+            let options = LoPhatOptions { maintain_v: false, num_threads: 0 };
+            let serial_dgm = rv_decompose(matrix.iter().cloned(), options).diagram();
+            let parallel_dgm = rv_decompose_lock_free(matrix.into_iter(), None, options).diagram();
             assert_eq!(serial_dgm, parallel_dgm);
         }
     }

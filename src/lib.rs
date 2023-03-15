@@ -16,11 +16,13 @@ mod column;
 mod decomposition;
 mod lock_free;
 mod matrix;
+mod options;
 
 pub use column::{Column, VecColumn};
 pub use decomposition::{rv_decompose, PersistenceDiagram, RVDecomposition};
 pub use lock_free::rv_decompose_lock_free;
 pub use matrix::*;
+pub use options::LoPhatOptions;
 
 fn matrix_from_pyiterator<'a>(matrix: &'a PyIterator) -> impl Iterator<Item = VecColumn> + 'a {
     matrix.map(|col| {
@@ -31,13 +33,23 @@ fn matrix_from_pyiterator<'a>(matrix: &'a PyIterator) -> impl Iterator<Item = Ve
 }
 
 #[pyfunction]
+#[pyo3(signature = (matrix))]
 fn compute_pairings_serial(matrix: &PyIterator) -> PersistenceDiagram {
-    rv_decompose(matrix_from_pyiterator(matrix)).diagram()
+    let options = LoPhatOptions {
+        maintain_v: false,
+        num_threads: 1,
+    };
+    rv_decompose(matrix_from_pyiterator(matrix), options).diagram()
 }
 
 #[pyfunction]
-fn compute_pairings(matrix: &PyIterator) -> PersistenceDiagram {
-    rv_decompose_lock_free(matrix_from_pyiterator(matrix), None).diagram()
+#[pyo3(signature = (matrix, num_threads=0))]
+fn compute_pairings(matrix: &PyIterator, num_threads: usize) -> PersistenceDiagram {
+    let options = LoPhatOptions {
+        maintain_v: false,
+        num_threads,
+    };
+    rv_decompose_lock_free(matrix_from_pyiterator(matrix), None, options).diagram()
 }
 
 /// A Python module implemented in Rust.

@@ -19,7 +19,8 @@ matrix = [
 ]
 
 # Note we pass iter(matrix)
-dgm_par = compute_pairings(iter(matrix))
+# Pass in 0 to specify that we want to use 4 threads
+dgm_par = compute_pairings(iter(matrix), num_threads=4)
 dgm_serial = compute_pairings_serial(iter(matrix))
 
 print("Parallel:")
@@ -29,3 +30,6 @@ print(dgm_par.paired)
 print("Serial:")
 print(dgm_serial.unpaired)
 print(dgm_serial.paired)
+
+assert dgm_par.unpaired == dgm_serial.unpaired
+assert dgm_par.paired == dgm_serial.paired
