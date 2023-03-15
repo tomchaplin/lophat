@@ -45,7 +45,7 @@ impl<C: Column> RVDecomposition<C> {
         let maintain_v = self.v.is_some();
         let mut v_col: Option<C> = None;
         if maintain_v {
-            let mut v_col = Some(C::default());
+            v_col = Some(C::default());
             v_col.as_mut().unwrap().add_entry(self.r.len());
         }
         // Reduce the column, keeping track of how we do this in V
@@ -95,7 +95,8 @@ impl<C: Column> RVDecomposition<C> {
 /// Decomposes the input matrix, using the standard, serial algorithm.
 ///
 /// * `matrix` - iterator over columns of the matrix you wish to decompose.
-pub fn rv_decompose<C: Column>(
+/// * `options` - additional options to control decompositon, see [`LoPhatOptions`].
+pub fn rv_decompose_serial<C: Column>(
     matrix: impl Iterator<Item = C>,
     options: LoPhatOptions,
 ) -> RVDecomposition<C> {
@@ -150,9 +151,30 @@ mod tests {
         };
         let options = LoPhatOptions {
             maintain_v: false,
+            column_height: None,
             num_threads: 0,
         };
-        let computed_diagram = rv_decompose(matrix, options).diagram();
+        let computed_diagram = rv_decompose_serial(matrix, options).diagram();
+        assert_eq!(computed_diagram, correct_diagram)
+    }
+
+    #[test]
+    fn test_v_maintain() {
+        let matrix = build_sphere_triangulation();
+        let options = LoPhatOptions {
+            maintain_v: true,
+            column_height: None,
+            num_threads: 0,
+        };
+        let correct_diagram = PersistenceDiagram {
+            unpaired: HashSet::from_iter(vec![0, 13]),
+            paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
+        };
+        let decomp = rv_decompose_serial(matrix, options);
+        let computed_diagram = decomp.diagram();
+        for col in decomp.v.unwrap() {
+            println!("{:?}", col);
+        }
         assert_eq!(computed_diagram, correct_diagram)
     }
 }

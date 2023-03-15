@@ -1,5 +1,3 @@
-use std::fmt::Debug;
-
 use crate::Column;
 use crate::LoPhatOptions;
 use crate::RVDecomposition;
@@ -83,12 +81,9 @@ fn reduce_column<C: Column>(
 /// Decomposes the input matrix, using the lockfree, parallel algoirhtm of Morozov and Nigmetov.
 ///
 /// * `matrix` - iterator over columns of the matrix you wish to decompose.
-/// * `column_height` - an optional hint to the height of the columns.
-///   If `None`, assumed to be `matrix.collect().len()`.
-///   All indices must lie in the range `0..column_height`.
-pub fn rv_decompose_lock_free<C: Column + Debug + 'static>(
+/// * `options` - additional options to control decompositon, see [`LoPhatOptions`].
+pub fn rv_decompose_lock_free<C: Column + 'static>(
     matrix: impl Iterator<Item = C>,
-    column_height: Option<usize>,
     options: LoPhatOptions,
 ) -> RVDecomposition<C> {
     let matrix: Vec<_> = matrix
@@ -103,7 +98,7 @@ pub fn rv_decompose_lock_free<C: Column + Debug + 'static>(
             }
         })
         .collect();
-    let column_height = column_height.unwrap_or(matrix.len());
+    let column_height = options.column_height.unwrap_or(matrix.len());
     let pivots: Vec<_> = (0..column_height).map(|_| AtomicCell::new(None)).collect();
     // Setup thread pool
     let thread_pool = ThreadPoolBuilder::new()
@@ -143,16 +138,16 @@ mod tests {
 
     use super::*;
     use crate::column::VecColumn;
-    use crate::rv_decompose;
+    use crate::rv_decompose_serial;
     use proptest::collection::hash_set;
     use proptest::prelude::*;
 
     proptest! {
         #[test]
         fn lockfree_agrees_with_serial( matrix in sut_matrix(100) ) {
-            let options = LoPhatOptions { maintain_v: false, num_threads: 0 };
-            let serial_dgm = rv_decompose(matrix.iter().cloned(), options).diagram();
-            let parallel_dgm = rv_decompose_lock_free(matrix.into_iter(), None, options).diagram();
+            let options = LoPhatOptions { maintain_v: false, column_height: None, num_threads: 0 };
+            let serial_dgm = rv_decompose_serial(matrix.iter().cloned(), options).diagram();
+            let parallel_dgm = rv_decompose_lock_free(matrix.into_iter(), options).diagram();
             assert_eq!(serial_dgm, parallel_dgm);
         }
     }
