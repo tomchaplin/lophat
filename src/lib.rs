@@ -56,6 +56,7 @@ fn compute_pairings_serial(matrix: &PyIterator) -> PersistenceDiagram {
         maintain_v: false,
         column_height: None,
         num_threads: 1,
+        min_chunk_len: 1,
     };
     rv_decompose_serial(matrix_from_pyiterator(matrix), options).diagram()
 }
@@ -67,6 +68,7 @@ fn compute_pairings_lock_free(matrix: &PyIterator, num_threads: usize) -> Persis
         maintain_v: false,
         column_height: None,
         num_threads,
+        min_chunk_len: 1,
     };
     rv_decompose_lock_free(matrix_from_pyiterator(matrix), options).diagram()
 }
@@ -78,6 +80,7 @@ fn compute_pairings(matrix: &PyIterator, options: Option<LoPhatOptions>) -> Pers
         maintain_v: false,
         num_threads: 0,
         column_height: None,
+        min_chunk_len: 1,
     });
     rv_decompose(matrix_from_pyiterator(matrix), options).diagram()
 }

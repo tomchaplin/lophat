@@ -56,6 +56,7 @@ For example usage, consult the file `example.py` or [this Google colab notebook]
 - [ ] Write Python documentation
 - [ ] Benchmark
 - [ ] Add alternative column representations
+- [ ] Implement a `LoPhatOptionsBuilder` in Rust and Python
 - [ ] Abstract out matrix trait
 
 ## References

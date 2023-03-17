@@ -153,6 +153,7 @@ mod tests {
             maintain_v: false,
             column_height: None,
             num_threads: 0,
+            min_chunk_len: 1,
         };
         let computed_diagram = rv_decompose_serial(matrix, options).diagram();
         assert_eq!(computed_diagram, correct_diagram)
@@ -165,6 +166,7 @@ mod tests {
             maintain_v: true,
             column_height: None,
             num_threads: 0,
+            min_chunk_len: 1,
         };
         let correct_diagram = PersistenceDiagram {
             unpaired: HashSet::from_iter(vec![0, 13]),

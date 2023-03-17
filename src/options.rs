@@ -11,6 +11,8 @@ use pyo3::prelude::*;
 ///   If `None`, assumed to be `matrix.collect().len()`.
 ///   All indices must lie in the range `0..column_height`.
 ///   Only relevant for lockfree algorithm.
+/// * `min_chunk_len` - When splitting work, ensure that each thread gets at least this many columns to work on at a time.
+///   Only relevant for lockfree algorithm.
 #[pyclass]
 #[derive(Default, Clone, Copy)]
 pub struct LoPhatOptions {
@@ -20,17 +22,25 @@ pub struct LoPhatOptions {
     pub num_threads: usize,
     #[pyo3(get, set)]
     pub column_height: Option<usize>,
+    #[pyo3(get, set)]
+    pub min_chunk_len: usize,
 }
 
 #[pymethods]
 impl LoPhatOptions {
     #[new]
-    #[pyo3(signature = (maintain_v=false, num_threads=0, column_height=None))]
-    fn new(maintain_v: bool, num_threads: usize, column_height: Option<usize>) -> Self {
+    #[pyo3(signature = (maintain_v=false, num_threads=0, column_height=None, min_chunk_len=1))]
+    fn new(
+        maintain_v: bool,
+        num_threads: usize,
+        column_height: Option<usize>,
+        min_chunk_len: usize,
+    ) -> Self {
         LoPhatOptions {
             maintain_v,
             num_threads,
             column_height,
+            min_chunk_len,
         }
     }
 }

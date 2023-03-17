@@ -27,8 +27,9 @@ matrix = [
 dgm_default = compute_pairings(iter(matrix))
 dgm_par = compute_pairings_lock_free(iter(matrix))
 dgm_serial = compute_pairings_serial(iter(matrix))
-# Don't maintain V, use 4 threads, assume matrix is square
-opts = LoPhatOptions(False, 4, None)
+# Don't maintain V, use 4 threads, assume matrix is square,
+# ensure each thread gets at least 2 colums at a time
+opts = LoPhatOptions(False, 4, None, 2)
 dgm_custom = compute_pairings(iter(matrix), opts)
 
 print("Default:")

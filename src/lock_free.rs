@@ -110,6 +110,7 @@ pub fn rv_decompose_lock_free<C: Column + 'static>(
     thread_pool.install(|| {
         (0..matrix.len())
             .into_par_iter()
+            .with_min_len(options.min_chunk_len)
             .for_each(|j| reduce_column(j, &matrix, &pivots));
     });
     // Wrap into RV decomposition
@@ -145,7 +146,7 @@ mod tests {
     proptest! {
         #[test]
         fn lockfree_agrees_with_serial( matrix in sut_matrix(100) ) {
-            let options = LoPhatOptions { maintain_v: false, column_height: None, num_threads: 0 };
+            let options = LoPhatOptions { maintain_v: false, column_height: None, num_threads: 0, min_chunk_len: 1 };
             let serial_dgm = rv_decompose_serial(matrix.iter().cloned(), options).diagram();
             let parallel_dgm = rv_decompose_lock_free(matrix.into_iter(), options).diagram();
             assert_eq!(serial_dgm, parallel_dgm);
