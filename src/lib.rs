@@ -76,7 +76,7 @@ fn compute_pairings(
         });
         compute_pairings_rs(matrix_as_rs_iter, options)
     } else {
-        panic!();
+        panic!("Could not coerce input matrix into List[List[int]] | Iterator[List[int]]");
     }
 }
 
