@@ -45,8 +45,9 @@ impl<C: Column> RVDecomposition<C> {
         let maintain_v = self.v.is_some();
         let mut v_col: Option<C> = None;
         if maintain_v {
-            v_col = Some(C::default());
-            v_col.as_mut().unwrap().add_entry(self.r.len());
+            let mut v_col_internal = C::default();
+            v_col_internal.add_entry(self.r.len());
+            v_col = Some(v_col_internal);
         }
         // Reduce the column, keeping track of how we do this in V
         while let Some(col_idx) = col_idx_with_same_low(&column, &low_inverse) {
@@ -70,10 +71,17 @@ impl<C: Column> RVDecomposition<C> {
             self.v.as_mut().unwrap().push(v_col.unwrap());
         }
     }
+}
 
+/// Able to construct persistence diagram from structs implementing this trait.
+pub trait DiagramReadOff {
+    fn diagram(&self) -> PersistenceDiagram;
+}
+
+impl<C: Column> DiagramReadOff for RVDecomposition<C> {
     /// Constructs a persistence diagram from the R=DV decomposition via the usual
     /// algorithm, reading off lowest-ones.
-    pub fn diagram(&self) -> PersistenceDiagram {
+    fn diagram(&self) -> PersistenceDiagram {
         let paired: HashSet<(usize, usize)> = self
             .r
             .par_iter()

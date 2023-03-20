@@ -1,129 +1,179 @@
 use crate::Column;
+use crate::DiagramReadOff;
 use crate::LoPhatOptions;
+use crate::PersistenceDiagram;
 use crate::RVDecomposition;
 
 use crossbeam::atomic::AtomicCell;
+use hashbrown::HashSet;
 use pinboard::NonEmptyPinboard;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
 
-// Implements do while loop lines 6-9
-fn get_col_with_pivot<C: Column>(
-    l: usize,
-    matrix: &Vec<NonEmptyPinboard<(C, Option<C>)>>,
-    pivots: &Vec<AtomicCell<Option<usize>>>,
-) -> Option<(usize, (C, Option<C>))> {
-    loop {
-        let piv = pivots[l].load();
-        if let Some(piv) = piv {
-            let cols = matrix[piv].read();
-            if cols.0.pivot() != Some(l) {
-                // Got a column but it now has the wrong pivot; loop again.
-                continue;
-            };
-            // Get column with correct pivot, return to caller.
-            return Some((piv, cols));
-        } else {
-            // There is not yet a column with this pivot, inform caller.
-            return None;
-        }
-    }
+/// Stores the matrix and pivot vector behind appropriate atomic data types, as well as the algorithm options.
+/// Provides methods for reducing the matrix in parallel.
+pub struct LockFreeAlgorithm<C: Column + 'static> {
+    matrix: Vec<NonEmptyPinboard<(C, Option<C>)>>,
+    pivots: Vec<AtomicCell<Option<usize>>>,
+    options: LoPhatOptions,
 }
 
-fn reduce_column<C: Column>(
-    j: usize,
-    matrix: &Vec<NonEmptyPinboard<(C, Option<C>)>>,
-    pivots: &Vec<AtomicCell<Option<usize>>>,
-) {
-    let mut working_j = j;
-    'outer: loop {
-        let mut curr_column = matrix[working_j].read();
-        while let Some(l) = (&curr_column).0.pivot() {
-            let piv_with_column_opt = get_col_with_pivot(l, &matrix, &pivots);
-            if let Some((piv, piv_column)) = piv_with_column_opt {
-                // Lines 17-24
-                if piv < working_j {
-                    curr_column.0.add_col(&piv_column.0);
-                    // Only add V columns if we need to
-                    if let Some(curr_v_col) = curr_column.1.as_mut() {
-                        curr_v_col.add_col(&piv_column.1.unwrap());
+impl<C: Column + 'static> LockFreeAlgorithm<C> {
+    /// Initialise atomic data structure with provided `matrix`; store algorithm options.
+    pub fn new(matrix: impl Iterator<Item = C>, options: LoPhatOptions) -> Self {
+        let matrix: Vec<_> = matrix
+            .enumerate()
+            .map(|(idx, r_col)| {
+                if options.maintain_v {
+                    let mut v_col = C::default();
+                    v_col.add_entry(idx);
+                    NonEmptyPinboard::new((r_col, Some(v_col)))
+                } else {
+                    NonEmptyPinboard::new((r_col, None))
+                }
+            })
+            .collect();
+        let column_height = options.column_height.unwrap_or(matrix.len());
+        let pivots: Vec<_> = (0..column_height).map(|_| AtomicCell::new(None)).collect();
+        Self {
+            matrix,
+            pivots,
+            options,
+        }
+    }
+
+    /// Return a column with index `l`, if one exists.
+    /// If found, returns `(col_idx, col)`, where col is a tuple consisting of the corresponding column in R and V.
+    /// If not maintaining V, second entry of tuple is `None`.
+    pub fn get_col_with_pivot(&self, l: usize) -> Option<(usize, (C, Option<C>))> {
+        loop {
+            let piv = self.pivots[l].load();
+            if let Some(piv) = piv {
+                let cols = self.matrix[piv].read();
+                if cols.0.pivot() != Some(l) {
+                    // Got a column but it now has the wrong pivot; loop again.
+                    continue;
+                };
+                // Get column with correct pivot, return to caller.
+                return Some((piv, cols));
+            } else {
+                // There is not yet a column with this pivot, inform caller.
+                return None;
+            }
+        }
+    }
+
+    /// Reduces the `j`th column of the matrix as far as possible.
+    /// Will maintain `V` if asked to do so.
+    /// If a pivot is found to the right of `j` (e.g. redued by another thread)
+    /// then will switch to reducing that column.
+    /// It is safe to reduce all columns in parallel.
+    pub fn reduce_column(&self, j: usize) {
+        let mut working_j = j;
+        'outer: loop {
+            let mut curr_column = self.matrix[working_j].read();
+            while let Some(l) = (&curr_column).0.pivot() {
+                let piv_with_column_opt = self.get_col_with_pivot(l);
+                if let Some((piv, piv_column)) = piv_with_column_opt {
+                    // Lines 17-24
+                    if piv < working_j {
+                        curr_column.0.add_col(&piv_column.0);
+                        // Only add V columns if we need to
+                        if let Some(curr_v_col) = curr_column.1.as_mut() {
+                            curr_v_col.add_col(&piv_column.1.unwrap());
+                        }
+                    } else if piv > working_j {
+                        self.matrix[working_j].set(curr_column);
+                        if self.pivots[l]
+                            .compare_exchange(Some(piv), Some(working_j))
+                            .is_ok()
+                        {
+                            working_j = piv;
+                        }
+                        continue 'outer;
+                    } else {
+                        panic!()
                     }
-                } else if piv > working_j {
-                    matrix[working_j].set(curr_column);
-                    if pivots[l]
-                        .compare_exchange(Some(piv), Some(working_j))
+                } else {
+                    // piv = -1 case
+                    self.matrix[working_j].set(curr_column);
+                    if self.pivots[l]
+                        .compare_exchange(None, Some(working_j))
                         .is_ok()
                     {
-                        working_j = piv;
+                        return;
+                    } else {
+                        continue 'outer;
                     }
-                    continue 'outer;
-                } else {
-                    panic!()
-                }
-            } else {
-                // piv = -1 case
-                matrix[working_j].set(curr_column);
-                if pivots[l].compare_exchange(None, Some(working_j)).is_ok() {
-                    return;
-                } else {
-                    continue 'outer;
                 }
             }
+            // Lines 25-27 (curr_column = 0 clause)
+            if (&curr_column.0).pivot().is_none() {
+                self.matrix[working_j].set(curr_column);
+                return;
+            }
         }
-        // Lines 25-27 (curr_column = 0 clause)
-        if (&curr_column.0).pivot().is_none() {
-            matrix[working_j].set(curr_column);
-            return;
-        }
+    }
+
+    /// Reduce all columns in parallel, according to `options`.
+    pub fn reduce(&self) {
+        // Setup thread pool
+        let thread_pool = ThreadPoolBuilder::new()
+            .num_threads(self.options.num_threads)
+            .build()
+            .expect("Failed to build thread pool");
+        // Reduce matrix
+        thread_pool.install(|| {
+            (0..self.matrix.len())
+                .into_par_iter()
+                .with_min_len(self.options.min_chunk_len)
+                .for_each(|j| self.reduce_column(j));
+        });
     }
 }
 
-fn setup_atomics<C: Column + 'static>(
-    matrix: impl Iterator<Item = C>,
-    options: &LoPhatOptions,
-) -> (
-    Vec<NonEmptyPinboard<(C, Option<C>)>>,
-    Vec<AtomicCell<Option<usize>>>,
-) {
-    let matrix: Vec<_> = matrix
-        .enumerate()
-        .map(|(idx, r_col)| {
-            if options.maintain_v {
-                let mut v_col = C::default();
-                v_col.add_entry(idx);
-                NonEmptyPinboard::new((r_col, Some(v_col)))
-            } else {
-                NonEmptyPinboard::new((r_col, None))
-            }
-        })
-        .collect();
-    let column_height = options.column_height.unwrap_or(matrix.len());
-    let pivots: Vec<_> = (0..column_height).map(|_| AtomicCell::new(None)).collect();
-    (matrix, pivots)
+impl<C: Column + 'static> DiagramReadOff for LockFreeAlgorithm<C> {
+    fn diagram(&self) -> crate::PersistenceDiagram {
+        let paired: HashSet<(usize, usize)> = self
+            .matrix
+            .par_iter()
+            .enumerate()
+            .filter_map(|(idx, col)| {
+                let lowest_idx = col.read().0.pivot()?;
+                Some((lowest_idx, idx))
+            })
+            .collect();
+        let mut unpaired: HashSet<usize> = (0..self.matrix.len()).collect();
+        for (birth, death) in paired.iter() {
+            unpaired.remove(birth);
+            unpaired.remove(death);
+        }
+        PersistenceDiagram { unpaired, paired }
+    }
 }
 
-fn build_rv_decomposition<C: Column + 'static>(
-    matrix: Vec<NonEmptyPinboard<(C, Option<C>)>>,
-    options: &LoPhatOptions,
-) -> RVDecomposition<C> {
-    let (r, v) = if options.maintain_v {
-        let (r_sub, v_sub) = matrix
-            .into_iter()
-            .map(|pinboard| pinboard.read())
-            .map(|(r_col, v_col)| (r_col, v_col.unwrap()))
-            .unzip();
-        (r_sub, Some(v_sub))
-    } else {
-        (
-            matrix
+impl<C: Column + 'static> From<LockFreeAlgorithm<C>> for RVDecomposition<C> {
+    fn from(algo: LockFreeAlgorithm<C>) -> Self {
+        let (r, v) = if algo.options.maintain_v {
+            let (r_sub, v_sub) = algo
+                .matrix
                 .into_iter()
                 .map(|pinboard| pinboard.read())
-                .map(|(r_col, _v_col)| r_col)
-                .collect(),
-            None,
-        )
-    };
-    RVDecomposition { r, v }
+                .map(|(r_col, v_col)| (r_col, v_col.unwrap()))
+                .unzip();
+            (r_sub, Some(v_sub))
+        } else {
+            (
+                algo.matrix
+                    .into_iter()
+                    .map(|pinboard| pinboard.read())
+                    .map(|(r_col, _v_col)| r_col)
+                    .collect(),
+                None,
+            )
+        };
+        RVDecomposition { r, v }
+    }
 }
 
 /// Decomposes the input matrix, using the lockfree, parallel algoirhtm of Morozov and Nigmetov.
@@ -133,23 +183,10 @@ fn build_rv_decomposition<C: Column + 'static>(
 pub fn rv_decompose_lock_free<C: Column + 'static>(
     matrix: impl Iterator<Item = C>,
     options: LoPhatOptions,
-) -> RVDecomposition<C> {
-    // Setup atomic storage for matrix and pivots vector
-    let (matrix, pivots) = setup_atomics(matrix, &options);
-    // Setup thread pool
-    let thread_pool = ThreadPoolBuilder::new()
-        .num_threads(options.num_threads)
-        .build()
-        .expect("Failed to build thread pool");
-    // Reduce matrix
-    thread_pool.install(|| {
-        (0..matrix.len())
-            .into_par_iter()
-            .with_min_len(options.min_chunk_len)
-            .for_each(|j| reduce_column(j, &matrix, &pivots));
-    });
-    // Wrap into RV decomposition
-    build_rv_decomposition(matrix, &options)
+) -> LockFreeAlgorithm<C> {
+    let algo = LockFreeAlgorithm::new(matrix, options);
+    algo.reduce();
+    algo
 }
 
 #[cfg(test)]
@@ -158,6 +195,7 @@ mod tests {
     use super::*;
     use crate::column::VecColumn;
     use crate::rv_decompose_serial;
+    use crate::DiagramReadOff;
     use proptest::collection::hash_set;
     use proptest::prelude::*;
 

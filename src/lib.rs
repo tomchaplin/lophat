@@ -20,8 +20,8 @@ mod matrix;
 mod options;
 
 pub use column::{Column, VecColumn};
-pub use decomposition::{rv_decompose_serial, PersistenceDiagram, RVDecomposition};
-pub use lock_free::rv_decompose_lock_free;
+pub use decomposition::{rv_decompose_serial, DiagramReadOff, PersistenceDiagram, RVDecomposition};
+pub use lock_free::{rv_decompose_lock_free, LockFreeAlgorithm};
 pub use matrix::*;
 pub use options::LoPhatOptions;
 
@@ -37,7 +37,18 @@ pub fn rv_decompose<C: Column + 'static>(
     if options.num_threads == 1 {
         rv_decompose_serial(matrix, options)
     } else {
-        rv_decompose_lock_free(matrix, options)
+        rv_decompose_lock_free(matrix, options).into()
+    }
+}
+
+fn compute_pairings_rs<C: Column + 'static>(
+    matrix: impl Iterator<Item = C>,
+    options: LoPhatOptions,
+) -> PersistenceDiagram {
+    if options.num_threads == 1 {
+        rv_decompose_serial(matrix, options).diagram()
+    } else {
+        rv_decompose_lock_free(matrix, options).diagram()
     }
 }
 
@@ -56,14 +67,14 @@ fn compute_pairings(
     });
     if let Ok(matrix_as_vec) = matrix.extract::<Vec<Vec<usize>>>() {
         let matrix_as_rs_iter = matrix_as_vec.into_iter().map(VecColumn::from);
-        rv_decompose(matrix_as_rs_iter, options).diagram()
+        compute_pairings_rs(matrix_as_rs_iter, options)
     } else if let Ok(py_iter) = PyIterator::from_object(py, matrix) {
         let matrix_as_rs_iter = py_iter.map(|col| {
             col.and_then(PyAny::extract::<Vec<usize>>)
                 .map(VecColumn::from)
                 .expect("Column is a list of unsigned integers")
         });
-        rv_decompose(matrix_as_rs_iter, options).diagram()
+        compute_pairings_rs(matrix_as_rs_iter, options)
     } else {
         panic!();
     }
