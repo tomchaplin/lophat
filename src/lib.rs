@@ -41,55 +41,37 @@ pub fn rv_decompose<C: Column + 'static>(
     }
 }
 
-fn matrix_from_pyiterator<'a>(matrix: &'a PyIterator) -> impl Iterator<Item = VecColumn> + 'a {
-    matrix.map(|col| {
-        col.and_then(PyAny::extract::<Vec<usize>>)
-            .map(VecColumn::from)
-            .expect("Column is a list of unsigned integers")
-    })
-}
-
-#[pyfunction]
-#[pyo3(signature = (matrix))]
-fn compute_pairings_serial(matrix: &PyIterator) -> PersistenceDiagram {
-    let options = LoPhatOptions {
-        maintain_v: false,
-        column_height: None,
-        num_threads: 1,
-        min_chunk_len: 1,
-    };
-    rv_decompose_serial(matrix_from_pyiterator(matrix), options).diagram()
-}
-
-#[pyfunction]
-#[pyo3(signature = (matrix, num_threads=0))]
-fn compute_pairings_lock_free(matrix: &PyIterator, num_threads: usize) -> PersistenceDiagram {
-    let options = LoPhatOptions {
-        maintain_v: false,
-        column_height: None,
-        num_threads,
-        min_chunk_len: 1,
-    };
-    rv_decompose_lock_free(matrix_from_pyiterator(matrix), options).diagram()
-}
-
 #[pyfunction]
 #[pyo3(signature = (matrix, options=None))]
-fn compute_pairings(matrix: &PyIterator, options: Option<LoPhatOptions>) -> PersistenceDiagram {
+fn compute_pairings(
+    py: Python<'_>,
+    matrix: &PyAny,
+    options: Option<LoPhatOptions>,
+) -> PersistenceDiagram {
     let options = options.unwrap_or(LoPhatOptions {
         maintain_v: false,
         num_threads: 0,
         column_height: None,
         min_chunk_len: 1,
     });
-    rv_decompose(matrix_from_pyiterator(matrix), options).diagram()
+    if let Ok(matrix_as_vec) = matrix.extract::<Vec<Vec<usize>>>() {
+        let matrix_as_rs_iter = matrix_as_vec.into_iter().map(VecColumn::from);
+        rv_decompose(matrix_as_rs_iter, options).diagram()
+    } else if let Ok(py_iter) = PyIterator::from_object(py, matrix) {
+        let matrix_as_rs_iter = py_iter.map(|col| {
+            col.and_then(PyAny::extract::<Vec<usize>>)
+                .map(VecColumn::from)
+                .expect("Column is a list of unsigned integers")
+        });
+        rv_decompose(matrix_as_rs_iter, options).diagram()
+    } else {
+        panic!();
+    }
 }
 
 /// A Python module implemented in Rust.
 #[pymodule]
 fn lophat(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(compute_pairings_lock_free, m)?)?;
-    m.add_function(wrap_pyfunction!(compute_pairings_serial, m)?)?;
     m.add_function(wrap_pyfunction!(compute_pairings, m)?)?;
     m.add_class::<LoPhatOptions>()?;
     Ok(())
