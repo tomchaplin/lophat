@@ -78,14 +78,13 @@ fn reduce_column<C: Column>(
     }
 }
 
-/// Decomposes the input matrix, using the lockfree, parallel algoirhtm of Morozov and Nigmetov.
-///
-/// * `matrix` - iterator over columns of the matrix you wish to decompose.
-/// * `options` - additional options to control decompositon, see [`LoPhatOptions`].
-pub fn rv_decompose_lock_free<C: Column + 'static>(
+fn setup_atomics<C: Column + 'static>(
     matrix: impl Iterator<Item = C>,
-    options: LoPhatOptions,
-) -> RVDecomposition<C> {
+    options: &LoPhatOptions,
+) -> (
+    Vec<NonEmptyPinboard<(C, Option<C>)>>,
+    Vec<AtomicCell<Option<usize>>>,
+) {
     let matrix: Vec<_> = matrix
         .enumerate()
         .map(|(idx, r_col)| {
@@ -100,20 +99,13 @@ pub fn rv_decompose_lock_free<C: Column + 'static>(
         .collect();
     let column_height = options.column_height.unwrap_or(matrix.len());
     let pivots: Vec<_> = (0..column_height).map(|_| AtomicCell::new(None)).collect();
-    // Setup thread pool
-    let thread_pool = ThreadPoolBuilder::new()
-        .num_threads(options.num_threads)
-        .build()
-        .expect("Failed to build thread pool");
-    // Reduce matrix
-    // TODO: Can we advice rayon to split work in chunks?
-    thread_pool.install(|| {
-        (0..matrix.len())
-            .into_par_iter()
-            .with_min_len(options.min_chunk_len)
-            .for_each(|j| reduce_column(j, &matrix, &pivots));
-    });
-    // Wrap into RV decomposition
+    (matrix, pivots)
+}
+
+fn build_rv_decomposition<C: Column + 'static>(
+    matrix: Vec<NonEmptyPinboard<(C, Option<C>)>>,
+    options: &LoPhatOptions,
+) -> RVDecomposition<C> {
     let (r, v) = if options.maintain_v {
         let (r_sub, v_sub) = matrix
             .into_iter()
@@ -132,6 +124,32 @@ pub fn rv_decompose_lock_free<C: Column + 'static>(
         )
     };
     RVDecomposition { r, v }
+}
+
+/// Decomposes the input matrix, using the lockfree, parallel algoirhtm of Morozov and Nigmetov.
+///
+/// * `matrix` - iterator over columns of the matrix you wish to decompose.
+/// * `options` - additional options to control decompositon, see [`LoPhatOptions`].
+pub fn rv_decompose_lock_free<C: Column + 'static>(
+    matrix: impl Iterator<Item = C>,
+    options: LoPhatOptions,
+) -> RVDecomposition<C> {
+    // Setup atomic storage for matrix and pivots vector
+    let (matrix, pivots) = setup_atomics(matrix, &options);
+    // Setup thread pool
+    let thread_pool = ThreadPoolBuilder::new()
+        .num_threads(options.num_threads)
+        .build()
+        .expect("Failed to build thread pool");
+    // Reduce matrix
+    thread_pool.install(|| {
+        (0..matrix.len())
+            .into_par_iter()
+            .with_min_len(options.min_chunk_len)
+            .for_each(|j| reduce_column(j, &matrix, &pivots));
+    });
+    // Wrap into RV decomposition
+    build_rv_decomposition(matrix, &options)
 }
 
 #[cfg(test)]
