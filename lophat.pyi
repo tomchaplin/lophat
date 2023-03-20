@@ -2,8 +2,8 @@ from typing import Iterator, List, Set, Tuple
 
 def compute_pairings(
     matrix: List[List[int]] | Iterator[List[int]],
-    options: "LoPhatOptions" | None = None,
-) -> "PersistenceDiagram":
+    options: LoPhatOptions | None = None,
+) -> PersistenceDiagram:
     """
     Computes pairings
 
