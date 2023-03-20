@@ -30,6 +30,14 @@ The only changes from the algorithm described in [[1]](#1) are:
 > The implementation is not optimised, the API is not fixed and tests are limited.
 > Use at your own risk.
 
+## Usage in Rust
+
+Install with
+```shell
+cargo add lophat
+```
+For usage, please consult [the Rust docs](https://docs.rs/lophat/latest/lophat/).
+
 ## Usage in Python
 
 The Python bindings can be installed via
@@ -41,11 +49,9 @@ To force installing from binary run
 ```shell
 pip install --only-binary lophat lophat
 ```
-This provides you with two functions, both of which return the diagram as a set of paired columns and a set of unpaired columns.
-They both compute these pairings via $R=DV$ decomposition but via different algorithms
-* `compute_pairings_serial` - using standard algorithm, in serial;
-* `compute_pairings` - using the lockfree algorithm of [[1]](#1).
-
+This provides you with one function, `compute_pairings`, which return the diagram as a set of paired columns and a set of unpaired columns.
+By default, this uses all available threads and the lockfree algorithm of [[1]](#1)
+To use serial algorithm or limit number of threads, additionally provide a `LoPhatOptions` object.
 For example usage, consult the file `example.py` or [this Google colab notebook](https://colab.research.google.com/drive/1y0_wZfvuUZfRreYPO50mo4rBlflkMcfj?usp=sharing)
 
 ## TODO
