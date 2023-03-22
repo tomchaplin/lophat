@@ -7,7 +7,7 @@
 [![crates.io](https://img.shields.io/crates/v/lophat)](https://crates.io/crates/lophat)
 [![PyPi](https://img.shields.io/pypi/v/lophat)](https://pypi.org/project/lophat/)
 [![docs.rs](https://img.shields.io/docsrs/lophat?label=Docs.rs)](https://docs.rs/lophat/latest/lophat/)
-<!--[![Read the Docs](https://img.shields.io/readthedocs/lophat?label=Read%20The%20Docs)]()-->
+[![Read the Docs](https://img.shields.io/readthedocs/lophat?label=Read%20The%20Docs)](https://lophat.readthedocs.io/en/latest/)
 
 </div>
 
@@ -26,9 +26,8 @@ The only changes from the algorithm described in [[1]](#1) are:
 * Rather than split the matrix into chunks, we use a work-stealing paradigm, via the `rayon` library.
 
 > **Warning**
-> LoPHAT is currently in alpha.
+> LoPHAT is currently in beta.
 > The implementation is not optimised, the API is not fixed and tests are limited.
-> Use at your own risk.
 
 ## Usage in Rust
 
@@ -49,17 +48,18 @@ To force installing from binary run
 ```shell
 pip install --only-binary lophat lophat
 ```
-This provides you with one function, `compute_pairings`, which return the diagram as a set of paired columns and a set of unpaired columns.
-By default, this uses all available threads and the lockfree algorithm of [[1]](#1)
+This provides you with one function, `compute_pairings`, which returns the diagram as a set of paired columns and a set of unpaired columns.
+By default, this uses all available threads and the lockfree algorithm of [[1]](#1).
 To use serial algorithm or limit number of threads, additionally provide a `LoPhatOptions` object.
-For example usage, consult the file `example.py` or [this Google colab notebook](https://colab.research.google.com/drive/1y0_wZfvuUZfRreYPO50mo4rBlflkMcfj?usp=sharing)
+
+For more details, please consult [the Python docs](https://lophat.readthedocs.io/en/latest/).
+For example usage, see the file `example.py` or [this Google colab notebook](https://colab.research.google.com/drive/1y0_wZfvuUZfRreYPO50mo4rBlflkMcfj?usp=sharing).
 
 ## TODO
 
 - [ ] Implement clearing optimisation when V not required
 - [ ] Increase property testing
 - [ ] Write unit tests
-- [ ] Write Python documentation
 - [ ] Benchmark
 - [ ] Add alternative column representations
 - [ ] Implement a `LoPhatOptionsBuilder` in Rust and Python
