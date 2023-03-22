@@ -15,12 +15,14 @@ use pyo3::types::PyIterator;
 
 mod column;
 mod decomposition;
+mod diagram;
 mod lock_free;
 mod matrix;
 mod options;
 
 pub use column::{Column, VecColumn};
-pub use decomposition::{rv_decompose_serial, DiagramReadOff, PersistenceDiagram, RVDecomposition};
+pub use decomposition::{rv_decompose_serial, RVDecomposition};
+pub use diagram::{DiagramReadOff, PersistenceDiagram};
 pub use lock_free::{rv_decompose_lock_free, LockFreeAlgorithm};
 pub use matrix::*;
 pub use options::LoPhatOptions;

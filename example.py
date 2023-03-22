@@ -31,19 +31,13 @@ dgm_custom = compute_pairings(matrix, opts)
 
 
 print("Iterator:")
-print(dgm_iter.unpaired)
-print(dgm_iter.paired)
+print(dgm_iter)
 
 print("List:")
-print(dgm_list.unpaired)
-print(dgm_list.paired)
+print(dgm_list)
 
 print("Custom:")
-print(dgm_custom.unpaired)
-print(dgm_custom.paired)
+print(dgm_custom)
 
-assert dgm_iter.unpaired == dgm_custom.unpaired
-assert dgm_iter.paired == dgm_custom.paired
-
-assert dgm_iter.unpaired == dgm_list.unpaired
-assert dgm_iter.paired == dgm_list.paired
+assert dgm_iter == dgm_custom
+assert dgm_iter == dgm_list

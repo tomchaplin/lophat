@@ -1,19 +1,7 @@
-use crate::{Column, LoPhatOptions};
+use crate::{Column, DiagramReadOff, LoPhatOptions, PersistenceDiagram};
 use hashbrown::HashSet;
-use pyo3::prelude::*;
 use rayon::prelude::*;
 use std::collections::HashMap;
-
-/// Stores the pairings from a matrix decomposition,
-/// as well as those columns which did not appear in a pairing.
-#[pyclass]
-#[derive(Default, Debug, Clone, PartialEq)]
-pub struct PersistenceDiagram {
-    #[pyo3(get)]
-    pub unpaired: HashSet<usize>,
-    #[pyo3(get)]
-    pub paired: HashSet<(usize, usize)>,
-}
 
 /// Stores the matrices R and V resulting from and R=DV decomposition as vectors of structs implementing [`Column`].
 #[derive(Debug, Default)]
@@ -71,11 +59,6 @@ impl<C: Column> RVDecomposition<C> {
             self.v.as_mut().unwrap().push(v_col.unwrap());
         }
     }
-}
-
-/// Able to construct persistence diagram from structs implementing this trait.
-pub trait DiagramReadOff {
-    fn diagram(&self) -> PersistenceDiagram;
 }
 
 impl<C: Column> DiagramReadOff for RVDecomposition<C> {

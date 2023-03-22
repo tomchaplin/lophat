@@ -79,7 +79,8 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
                     if piv < working_j {
                         curr_column.0.add_col(&piv_column.0);
                         // Only add V columns if we need to
-                        if let Some(curr_v_col) = curr_column.1.as_mut() {
+                        if self.options.maintain_v {
+                            let curr_v_col = curr_column.1.as_mut().unwrap();
                             curr_v_col.add_col(&piv_column.1.unwrap());
                         }
                     } else if piv > working_j {
