@@ -1,6 +1,8 @@
-
-LoPHAT - Python documentation
+Python Bindings
 ==================================
+
+The current bindings are exposed in the Python lophat package.
+For more information, please see `the repository <https://github.com/tomchaplin/lophat>`_.
 
 .. py:currentmodule:: lophat
 
