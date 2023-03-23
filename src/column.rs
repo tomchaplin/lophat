@@ -10,6 +10,8 @@ pub trait Column: Sync + Clone + Send + Default {
     /// Should be equivalent to `self.add_col(e_entry)` where `e_entry` is the column
     /// with all zeros except a 1 in index `entry`.
     fn add_entry(&mut self, entry: usize);
+    /// Return whether or not entry appears with value 1 in the column
+    fn has_entry(&self, entry: &usize) -> bool;
 }
 
 /// A [`Column`]-implementing struct, representing the column by an increasing vector of the non-zero indices.
@@ -60,6 +62,10 @@ impl Column for VecColumn {
         for entry in other.internal.iter() {
             working_idx = self.add_entry_starting_at(*entry, working_idx);
         }
+    }
+
+    fn has_entry(&self, entry: &usize) -> bool {
+        self.internal.contains(entry)
     }
 }
 
