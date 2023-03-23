@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import pandas as pd
-from lophat import compute_pairings, LoPhatOptions
+from lophat import compute_pairings, LoPhatOptions, compute_pairings_anti_transpose
 from gudhi import RipsComplex
 import time
 import pickle
@@ -58,19 +58,8 @@ def get_sparse_boundary(smplx):
     )
 
 
-chunk_sizes = [
-    10,
-    100,
-    500,
-    1000,
-    5000,
-    10000,
-    20000,
-    50000,
-]
+opts = LoPhatOptions(num_threads=1)
 
-data = []
-N_runs = 50
 
 print("Starting runs")
 clearing_opts = LoPhatOptions(min_chunk_len=10000, clearing=True)

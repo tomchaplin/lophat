@@ -1,4 +1,4 @@
-from lophat import compute_pairings, LoPhatOptions
+from lophat import compute_pairings, LoPhatOptions, compute_pairings_anti_transpose
 
 # Note that I don't tell lophat what dimension my columns are
 matrix = [
@@ -30,6 +30,9 @@ opts = LoPhatOptions(False, 4, None, 2)
 dgm_custom = compute_pairings(matrix, opts)
 
 
+opts = LoPhatOptions(num_threads=1)
+dgm_at = compute_pairings_anti_transpose(matrix, opts)
+
 print("Iterator:")
 print(dgm_iter)
 
@@ -39,5 +42,9 @@ print(dgm_list)
 print("Custom:")
 print(dgm_custom)
 
+print("Anti-Transpose:")
+print(dgm_at)
+
 assert dgm_iter == dgm_custom
 assert dgm_iter == dgm_list
+assert dgm_iter == dgm_at

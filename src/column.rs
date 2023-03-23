@@ -31,7 +31,7 @@ pub trait Column: Sync + Clone + Send {
 /// A [`Column`]-implementing struct, representing the column by an increasing vector of the non-zero indices.
 ///
 /// To construct call [`VecColumn::from`].
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct VecColumn {
     pub boundary: Vec<usize>,
     pub dimension: usize,
