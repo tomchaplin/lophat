@@ -77,13 +77,13 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
     }
 
     /// Reduces the `j`th column of the matrix as far as possible.
-    /// Will maintain `V` if asked to do so.
     /// If a pivot is found to the right of `j` (e.g. redued by another thread)
     /// then will switch to reducing that column.
     /// It is safe to reduce all columns in parallel.
     pub fn reduce_column(&self, j: usize) {
         let mut working_j = j;
         'outer: loop {
+            //println!("{:?}", working_j);
             let mut curr_column = self.matrix[working_j].read();
             while let Some(l) = (&curr_column).0.pivot() {
                 let piv_with_column_opt = self.get_col_with_pivot(l);
@@ -182,7 +182,9 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
     pub fn reduce(&self) {
         for dimension in (0..=self.max_dim).rev() {
             self.reduce_dimension(dimension);
+            println!("Reduced dimension {}", dimension);
             if self.options.clearing && dimension > 0 {
+                println!("Cleared dimension {}", dimension);
                 self.clear_dimension(dimension)
             }
         }

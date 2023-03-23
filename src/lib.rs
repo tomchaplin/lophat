@@ -61,7 +61,6 @@ fn anti_transpose_diagram(
     mut diagram: PersistenceDiagram,
     pre_at_size: (usize, usize),
 ) -> PersistenceDiagram {
-    println!("{:?}", pre_at_size);
     let (m, n) = pre_at_size;
     let new_paired = diagram
         .paired

@@ -60,7 +60,12 @@ impl<C: Column> From<(Vec<C>, Option<usize>)> for VecMatrix<C> {
 pub fn anti_transpose(matrix: &Vec<VecColumn>, matrix_height: Option<usize>) -> Vec<VecColumn> {
     let matrix_width = matrix.len();
     let matrix_height = matrix_height.unwrap_or(matrix_width);
-    let mut return_matrix: Vec<VecColumn> = vec![VecColumn::default(); matrix_height];
+    let max_dim = matrix.iter().map(|col| col.dimension()).max().unwrap();
+    let mut return_matrix: Vec<_> = matrix
+        .iter()
+        .rev()
+        .map(|col| VecColumn::new_with_dimension(max_dim - col.dimension()))
+        .collect();
     for (j, col) in matrix.iter().enumerate() {
         for i in col.boundary.iter() {
             return_matrix[matrix_height - 1 - i].add_entry(matrix_width - 1 - j);

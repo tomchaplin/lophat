@@ -12,7 +12,7 @@ import pickle
 random.seed(42)
 np.random.seed(42)
 
-N = 250
+N = 200
 N_nice = 20
 max_diagram_dim = 1
 jitter_strength = 0.05
@@ -53,7 +53,7 @@ for idx, f_val in enumerate(simplex_tree.get_filtration()):
 
 def get_sparse_boundary(smplx):
     return (
-        len(smplx),
+        len(smplx) - 1,
         sorted([int(face_idx) for _, face_idx in s_tree2.get_boundaries(smplx)]),
     )
 
@@ -62,17 +62,33 @@ opts = LoPhatOptions(num_threads=1)
 
 
 print("Starting runs")
-clearing_opts = LoPhatOptions(min_chunk_len=10000, clearing=True)
-no_clearing_opts = LoPhatOptions(min_chunk_len=10000, clearing=False)
+clearing_opts = LoPhatOptions(min_chunk_len=1, clearing=True)
+no_clearing_opts = LoPhatOptions(min_chunk_len=1, clearing=False)
 
+print("Normal clearing")
 matrix = [get_sparse_boundary(f_val[0]) for f_val in s_tree2.get_filtration()]
 tic1 = time.time()
-diagram_clr = compute_pairings(matrix, clearing_opts)
+diagram1 = compute_pairings(matrix, clearing_opts)
 tic2 = time.time()
 print(tic2 - tic1)
+time.sleep(2)
 
+print("Normal no clearing")
 matrix = [get_sparse_boundary(f_val[0]) for f_val in s_tree2.get_filtration()]
-tic3 = time.time()
-diagram_clr = compute_pairings(matrix, no_clearing_opts)
-tic4 = time.time()
-print(tic4 - tic3)
+tic1 = time.time()
+diagram2 = compute_pairings(matrix, no_clearing_opts)
+tic2 = time.time()
+print(tic2 - tic1)
+time.sleep(2)
+
+print("AT clearing")
+matrix = [get_sparse_boundary(f_val[0]) for f_val in s_tree2.get_filtration()]
+tic1 = time.time()
+diagram3 = compute_pairings_anti_transpose(matrix, clearing_opts)
+tic2 = time.time()
+print(tic2 - tic1)
+time.sleep(2)
+
+assert diagram1 == diagram1
+assert diagram1 == diagram2
+assert diagram1 == diagram3
