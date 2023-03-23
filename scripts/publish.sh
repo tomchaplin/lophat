@@ -1,4 +1,5 @@
 #!/bin/bash
+sudo systemctl start docker
 sudo docker run \
     --env-file .env \
     --rm \
