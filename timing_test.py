@@ -72,7 +72,7 @@ N_runs = 50
 print("Starting runs")
 
 for size in chunk_sizes:
-    opts = LoPhatOptions(min_chunk_len=size)
+    opts = LoPhatOptions(max_chunk_len=size)
     times = []
     for i in range(N_runs):
         matrix = (get_sparse_boundary(f_val[0]) for f_val in s_tree2.get_filtration())

@@ -5,6 +5,7 @@ use crate::PersistenceDiagram;
 use crate::RVDecomposition;
 
 use crossbeam::atomic::AtomicCell;
+use crossbeam::epoch::pin;
 use hashbrown::HashSet;
 use pinboard::NonEmptyPinboard;
 use rayon::prelude::*;
@@ -125,10 +126,18 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
             .expect("Failed to build thread pool");
         // Reduce matrix
         thread_pool.install(|| {
+            // TODO: How to avoid assigning a vec of idcs for each chunk?
+            // TODO: How to avoid specific chunk len using with_{min/max}_len from rayon?
             (0..self.matrix.len())
                 .into_par_iter()
-                .with_min_len(self.options.min_chunk_len)
-                .for_each(|j| self.reduce_column(j));
+                .chunks(self.options.max_chunk_len)
+                .for_each(|chunk| {
+                    for j in chunk {
+                        self.reduce_column(j)
+                    }
+                    // This is equivalent to mm.quiescent()
+                    pin();
+                });
         });
     }
 }
@@ -203,7 +212,7 @@ mod tests {
     proptest! {
         #[test]
         fn lockfree_agrees_with_serial( matrix in sut_matrix(100) ) {
-            let options = LoPhatOptions { maintain_v: false, column_height: None, num_threads: 0, min_chunk_len: 1 };
+            let options = LoPhatOptions { maintain_v: false, column_height: None, num_threads: 0, max_chunk_len: 100 };
             let serial_dgm = rv_decompose_serial(matrix.iter().cloned(), options).diagram();
             let parallel_dgm = rv_decompose_lock_free(matrix.into_iter(), options).diagram();
             assert_eq!(serial_dgm, parallel_dgm);

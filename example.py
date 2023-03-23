@@ -25,7 +25,7 @@ dgm_list = compute_pairings(iter(matrix))
 
 # Can optionally provide a LoPhatOptions
 # Don't maintain V, use 4 threads, assume matrix is square,
-# ensure each thread gets at least 2 colums at a time
+# ensure each thread gets at most 2 colums at a time
 opts = LoPhatOptions(False, 4, None, 2)
 dgm_custom = compute_pairings(matrix, opts)
 

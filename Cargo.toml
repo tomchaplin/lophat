@@ -1,13 +1,13 @@
 [package]
 name = "lophat"
-version = "0.6.2"
+version = "0.7.0"
 edition = "2021"
 license = "MIT"
 description = "Lockfree Persistent Homology Algorithm Toolbox"
 homepage = "https://github.com/tomchaplin/lophat"
 repository = "https://github.com/tomchaplin/lophat"
 readme = "README.md"
-exclude = ["scripts/**/*"]
+exclude = ["scripts/**/*", "docs/**/*"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]

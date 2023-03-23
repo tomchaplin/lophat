@@ -61,12 +61,7 @@ fn compute_pairings(
     matrix: &PyAny,
     options: Option<LoPhatOptions>,
 ) -> PersistenceDiagram {
-    let options = options.unwrap_or(LoPhatOptions {
-        maintain_v: false,
-        num_threads: 0,
-        column_height: None,
-        min_chunk_len: 1,
-    });
+    let options = options.unwrap_or(LoPhatOptions::default());
     if let Ok(matrix_as_vec) = matrix.extract::<Vec<Vec<usize>>>() {
         let matrix_as_rs_iter = matrix_as_vec.into_iter().map(VecColumn::from);
         compute_pairings_rs(matrix_as_rs_iter, options)

@@ -17,7 +17,7 @@ For more information, please see `the repository <https://github.com/tomchaplin/
     :returns: The persistence pairings read off from the R=DV decomposition.
     :rtype: PersistenceDiagram
 
-.. py:class:: LoPhatOptions(maintain_v = False,num_threads= 0,column_height= None,min_chunk_len= 0)
+.. py:class:: LoPhatOptions(maintain_v = False,num_threads= 0,column_height= None,max_chunk_len= 1)
 
     A class representing the persistence diagram computed by LoPHAT.
     Each column index in the input matrix appears exactly once, either in a pairing or as unpaired.
@@ -28,8 +28,8 @@ For more information, please see `the repository <https://github.com/tomchaplin/
     :type num_threads: int
     :param column_height: Optional hint to height of columns. If None, assumed that matrix is square.
     :type column_height: int | None
-    :param min_chunk_len: The minimum number of columns that a thread should be allowed to work on at once.
-    :type min_chunk_len: int
+    :param max_chunk_len: Maximum size of a chunk, given to each thread.
+    :type max_chunk_len: int
 
 .. py:class:: PersistenceDiagram()
 

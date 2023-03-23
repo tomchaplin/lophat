@@ -140,12 +140,7 @@ mod tests {
             unpaired: HashSet::from_iter(vec![0, 13]),
             paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
         };
-        let options = LoPhatOptions {
-            maintain_v: false,
-            column_height: None,
-            num_threads: 0,
-            min_chunk_len: 1,
-        };
+        let options = LoPhatOptions::default();
         let computed_diagram = rv_decompose_serial(matrix, options).diagram();
         assert_eq!(computed_diagram, correct_diagram)
     }
@@ -153,12 +148,8 @@ mod tests {
     #[test]
     fn test_v_maintain() {
         let matrix = build_sphere_triangulation();
-        let options = LoPhatOptions {
-            maintain_v: true,
-            column_height: None,
-            num_threads: 0,
-            min_chunk_len: 1,
-        };
+        let mut options = LoPhatOptions::default();
+        options.maintain_v = true;
         let correct_diagram = PersistenceDiagram {
             unpaired: HashSet::from_iter(vec![0, 13]),
             paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
