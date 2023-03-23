@@ -12,7 +12,7 @@ import pickle
 random.seed(42)
 np.random.seed(42)
 
-N = 150
+N = 250
 N_nice = 20
 max_diagram_dim = 1
 jitter_strength = 0.05
@@ -52,7 +52,10 @@ for idx, f_val in enumerate(simplex_tree.get_filtration()):
 
 
 def get_sparse_boundary(smplx):
-    return sorted([int(face_idx) for _, face_idx in s_tree2.get_boundaries(smplx)])
+    return (
+        len(smplx),
+        sorted([int(face_idx) for _, face_idx in s_tree2.get_boundaries(smplx)]),
+    )
 
 
 chunk_sizes = [
@@ -70,20 +73,17 @@ data = []
 N_runs = 50
 
 print("Starting runs")
+clearing_opts = LoPhatOptions(min_chunk_len=10000, clearing=True)
+no_clearing_opts = LoPhatOptions(min_chunk_len=10000, clearing=False)
 
-for size in chunk_sizes:
-    opts = LoPhatOptions(max_chunk_len=size)
-    times = []
-    for i in range(N_runs):
-        matrix = (get_sparse_boundary(f_val[0]) for f_val in s_tree2.get_filtration())
-        tic = time.time()
-        diagram = compute_pairings(matrix, opts)
-        toc = time.time()
-        elapsed = toc - tic
-        times.append(elapsed)
-        data.append(times)
-    print(f"Finished chunk size {size}")
-    print(times)
+matrix = [get_sparse_boundary(f_val[0]) for f_val in s_tree2.get_filtration()]
+tic1 = time.time()
+diagram_clr = compute_pairings(matrix, clearing_opts)
+tic2 = time.time()
+print(tic2 - tic1)
 
-with open("data.pkl", "wb") as f:
-    pickle.dump(data, f)
+matrix = [get_sparse_boundary(f_val[0]) for f_val in s_tree2.get_filtration()]
+tic3 = time.time()
+diagram_clr = compute_pairings(matrix, no_clearing_opts)
+tic4 = time.time()
+print(tic4 - tic3)

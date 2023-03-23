@@ -1,7 +1,7 @@
 from typing import Iterator, List, Set, Tuple
 
 def compute_pairings(
-    matrix: List[List[int]] | Iterator[List[int]],
+    matrix: List[Tuple[int, List[int]]] | Iterator[Tuple[int, List[int]]],
     options: LoPhatOptions | None = None,
 ) -> PersistenceDiagram:
     """
@@ -20,7 +20,7 @@ class LoPhatOptions:
     :param maintain_v: Whether to maintain_v during decompositon, usually best left False.
     :param num_threads: Max number of threads to use. Set at 0 to use all threads. Set at 1 to use standard, serial algorithm.
     :param column_height: Optional hint to height of columns. If None, assumed that matrix is square.
-    :param max_chunk_len: Maximum size of a chunk, given to each thread.
+    :param min_chunk_len: When splitting work, don't reduce chunks to smaller than this size.
     """
 
     def __init__(
@@ -28,7 +28,7 @@ class LoPhatOptions:
         maintain_v: bool = False,
         num_threads: int = 0,
         column_height: int | None = None,
-        max_chunk_len: int = 1,
+        min_chunk_len: int = 1,
     ) -> None: ...
 
 class PersistenceDiagram:

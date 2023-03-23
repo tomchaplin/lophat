@@ -2,20 +2,20 @@ from lophat import compute_pairings, LoPhatOptions
 
 # Note that I don't tell lophat what dimension my columns are
 matrix = [
-    [],
-    [],
-    [],
-    [],
-    [0, 1],
-    [0, 2],
-    [1, 2],
-    [0, 3],
-    [1, 3],
-    [2, 3],
-    [4, 7, 8],
-    [5, 7, 9],
-    [6, 8, 9],
-    [4, 5, 6],
+    (0, []),
+    (0, []),
+    (0, []),
+    (0, []),
+    (1, [0, 1]),
+    (1, [0, 2]),
+    (1, [1, 2]),
+    (1, [0, 3]),
+    (1, [1, 3]),
+    (1, [2, 3]),
+    (2, [4, 7, 8]),
+    (2, [5, 7, 9]),
+    (2, [6, 8, 9]),
+    (2, [4, 5, 6]),
 ]
 
 # Can pass in matrix either as List[List[int]] or Iterator[List[int]]

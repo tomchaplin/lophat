@@ -56,22 +56,3 @@ impl<C: Column> From<(Vec<C>, Option<usize>)> for VecMatrix<C> {
         }
     }
 }
-
-pub fn anti_transpose<'a, C: Column, M: IndexableMatrix<C>>(
-    matrix: &'a M,
-) -> impl Iterator<Item = C> + 'a {
-    let matrix_width = matrix.width();
-    (0..matrix.height()).map(move |j| {
-        // Need to produce column j for antitranspose
-        let mut internal = C::default();
-        for i in 0..matrix_width {
-            if matrix
-                .col(matrix_width - i)
-                .has_entry(&(matrix.height() - j))
-            {
-                internal.add_entry(i)
-            }
-        }
-        internal
-    })
-}
