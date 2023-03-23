@@ -5,7 +5,6 @@ use crate::PersistenceDiagram;
 use crate::RVDecomposition;
 
 use crossbeam::atomic::AtomicCell;
-use crossbeam::epoch::pin;
 use hashbrown::HashSet;
 use pinboard::NonEmptyPinboard;
 use rayon::prelude::*;
@@ -135,8 +134,6 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
                     for j in chunk {
                         self.reduce_column(j)
                     }
-                    // This is equivalent to mm.quiescent()
-                    pin();
                 });
         });
     }
