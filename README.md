@@ -21,7 +21,7 @@ In particular, LoPHAT is **not** specialised to compute PH of common filtrations
 As such, you should expect LoPHAT to under-perform as compared to [giotto-ph [3]](#3) or [oineus  [4]](#4), both of which use the algorithm of [[1]](#1).
 
 The only changes from the algorithm described in [[1]](#1) are:
-* We use the `pinboard` library for memory management of the matrices.
+* We use the `pinboard` library for epoch-based memory management of the matrices.
 * We store the $j^{th}$ column of $R$ and $V$ alongside each other in memory, allowing a full $R=DV$ decomposition (rather than just computing pairings).
 * We distribute chunks via work-stealing, using the `rayon` library.
 
