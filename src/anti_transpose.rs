@@ -1,74 +1,43 @@
-use crate::{Column, VecColumn};
+use hashbrown::HashSet;
 
-/// Unused.
-pub trait IndexableMatrix<C: Column> {
-    fn col(&self, index: usize) -> &C;
-    fn set_col(&mut self, index: usize, col: C);
-    fn push_col(&mut self, col: C);
-    fn width(&self) -> usize;
-    fn height(&self) -> usize;
+use crate::{Column, PersistenceDiagram};
+
+/// Re-indexes a persistence diagram, assuming that it was produced from an anti-transposed matrix.
+/// * `diagram` - the diagram to reindex.
+/// * `matrix_size` - the size of the decomposed matrix, assumed to be square.
+pub fn anti_transpose_diagram(
+    mut diagram: PersistenceDiagram,
+    matrix_size: usize,
+) -> PersistenceDiagram {
+    let new_paired = diagram
+        .paired
+        .into_iter()
+        .map(|(b, d)| (matrix_size - 1 - d, matrix_size - 1 - b))
+        .collect();
+    diagram.paired = new_paired;
+    let mut unpaired: HashSet<usize> = (0..matrix_size).collect();
+    for (birth, death) in diagram.paired.iter() {
+        unpaired.remove(birth);
+        unpaired.remove(death);
+    }
+    diagram.unpaired = unpaired;
+    diagram
 }
 
-pub struct VecMatrix<C> {
-    pub cols: Vec<C>,
-    height: usize,
-}
-
-impl<C: Column> IndexableMatrix<C> for VecMatrix<C> {
-    fn col(&self, index: usize) -> &C {
-        &self.cols[index]
-    }
-
-    fn set_col(&mut self, index: usize, col: C) {
-        self.cols[index] = col;
-    }
-
-    fn push_col(&mut self, col: C) {
-        self.cols.push(col);
-    }
-
-    fn width(&self) -> usize {
-        self.cols.len()
-    }
-
-    fn height(&self) -> usize {
-        self.height
-    }
-}
-
-impl<C: Column> From<Vec<C>> for VecMatrix<C> {
-    fn from(cols: Vec<C>) -> Self {
-        Self {
-            height: cols.len(),
-            cols,
-        }
-    }
-}
-
-impl<C: Column> From<(Vec<C>, Option<usize>)> for VecMatrix<C> {
-    fn from((cols, height): (Vec<C>, Option<usize>)) -> Self {
-        match height {
-            Some(height) => Self { height, cols },
-            None => Self {
-                height: cols.len(),
-                cols,
-            },
-        }
-    }
-}
-
-pub fn anti_transpose(matrix: &Vec<VecColumn>, matrix_height: Option<usize>) -> Vec<VecColumn> {
+/// Anti-transposes the input matrix (e.g. to compute cohomology).
+/// * `matrix` - a reference to a collected matrix (vector of columns).
+/// Assumes that input matrix is square.
+pub fn anti_transpose<C: Column>(matrix: &Vec<C>) -> Vec<C> {
     let matrix_width = matrix.len();
-    let matrix_height = matrix_height.unwrap_or(matrix_width);
     let max_dim = matrix.iter().map(|col| col.dimension()).max().unwrap();
     let mut return_matrix: Vec<_> = matrix
         .iter()
         .rev()
-        .map(|col| VecColumn::new_with_dimension(max_dim - col.dimension()))
+        .map(|col| C::new_with_dimension(max_dim - col.dimension()))
         .collect();
     for (j, col) in matrix.iter().enumerate() {
-        for i in col.boundary.iter() {
-            return_matrix[matrix_height - 1 - i].add_entry(matrix_width - 1 - j);
+        for i in col.boundary().iter() {
+            return_matrix[matrix_width - 1 - i].add_entry(matrix_width - 1 - j);
         }
     }
     return_matrix
@@ -127,7 +96,7 @@ mod tests {
     fn sphere_triangulation_at() {
         let matrix = build_sphere_triangulation();
         let matrix_at = build_sphere_triangulation_at();
-        let at: Vec<VecColumn> = anti_transpose(&matrix, None);
+        let at: Vec<VecColumn> = anti_transpose(&matrix);
         assert_eq!(at, matrix_at);
     }
     use proptest::collection::hash_set;
@@ -136,8 +105,8 @@ mod tests {
     proptest! {
         #[test]
         fn at_at_is_identity( matrix in sut_matrix(100) ) {
-            let at: Vec<VecColumn> = anti_transpose(&matrix, None);
-            let at_at: Vec<VecColumn> = anti_transpose(&at, None);
+            let at: Vec<VecColumn> = anti_transpose(&matrix);
+            let at_at: Vec<VecColumn> = anti_transpose(&at);
             assert_eq!(matrix, at_at);
         }
     }

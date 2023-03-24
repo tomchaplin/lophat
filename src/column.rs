@@ -16,8 +16,11 @@ pub trait Column: Sync + Clone + Send {
     fn dimension(&self) -> usize;
     /// Init an empty column with the given dimension
     fn new_with_dimension(dimension: usize) -> Self;
-    /// Init an empty column with the given dimension
+    /// Change column to provided dimension
     fn with_dimension(self, dimension: usize) -> Self;
+    // TODO: Change to arbitrary iterator return type
+    /// Returns the boundary of the columns as a vector of non-zero indices
+    fn boundary(&self) -> &Vec<usize>;
 
     fn is_cycle(&self) -> bool {
         self.pivot().is_none()
@@ -97,6 +100,10 @@ impl Column for VecColumn {
     fn with_dimension(mut self, dimension: usize) -> Self {
         self.dimension = dimension;
         self
+    }
+
+    fn boundary(&self) -> &Vec<usize> {
+        &self.boundary
     }
 }
 

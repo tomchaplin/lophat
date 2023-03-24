@@ -1,7 +1,5 @@
 use pyo3::prelude::*;
 
-use crate::VecIndexMap;
-
 /// A simple struct for specifying options for R=DV decompositions
 ///
 /// * `maintain_v` - if true, returns full R=DV decomposition,
@@ -14,6 +12,9 @@ use crate::VecIndexMap;
 ///   All indices must lie in the range `0..column_height`.
 ///   Only relevant for lockfree algorithm.
 /// * `min_chunk_len` - When splitting work, don't reduce chunks to smaller than this size.
+///   Only relevant for lockfree algorithm.
+/// * `clearing` - Whether to employ the clearing optimisation.
+///   Note, if input matrix is not square then can't use this optimisation since it assumes D*D = 0.
 ///   Only relevant for lockfree algorithm.
 #[pyclass]
 #[derive(Clone)]
@@ -28,7 +29,6 @@ pub struct LoPhatOptions {
     pub min_chunk_len: usize,
     #[pyo3(get, set)]
     pub clearing: bool,
-    pub row_to_col: Option<VecIndexMap>,
 }
 
 #[pymethods]
@@ -47,7 +47,6 @@ impl LoPhatOptions {
             num_threads,
             column_height,
             min_chunk_len,
-            row_to_col: None,
             clearing,
         }
     }
@@ -60,7 +59,6 @@ impl Default for LoPhatOptions {
             num_threads: 0,
             column_height: None,
             min_chunk_len: 1,
-            row_to_col: None,
             clearing: true,
         }
     }

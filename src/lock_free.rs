@@ -1,6 +1,5 @@
 use crate::Column;
 use crate::DiagramReadOff;
-use crate::IndexMap;
 use crate::LoPhatOptions;
 use crate::PersistenceDiagram;
 use crate::RVDecomposition;
@@ -135,13 +134,6 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
         let clearing_idx = boundary_r
             .pivot()
             .expect("Attempted to clear using cycle column");
-        // If we have a custom correspondence, use that to find the corresponding column
-        let clearing_idx = self
-            .options
-            .row_to_col
-            .as_ref()
-            .and_then(|mapping| mapping.map_idx(clearing_idx))
-            .unwrap_or(clearing_idx);
         let clearing_dimension = self.matrix[clearing_idx].read().0.dimension();
         // The cleared R column is empty
         let r_col = C::new_with_dimension(clearing_dimension);
@@ -182,9 +174,7 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
     pub fn reduce(&self) {
         for dimension in (0..=self.max_dim).rev() {
             self.reduce_dimension(dimension);
-            println!("Reduced dimension {}", dimension);
             if self.options.clearing && dimension > 0 {
-                println!("Cleared dimension {}", dimension);
                 self.clear_dimension(dimension)
             }
         }
