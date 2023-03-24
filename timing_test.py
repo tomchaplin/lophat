@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import pandas as pd
-from lophat import compute_pairings, LoPhatOptions, compute_pairings_anti_transpose
+from lophat import compute_pairings, LoPhatOptions
 from gudhi import RipsComplex
 import time
 import pickle
@@ -12,7 +12,7 @@ import pickle
 random.seed(42)
 np.random.seed(42)
 
-N = 300
+N = 150
 N_nice = 20
 max_diagram_dim = 1
 jitter_strength = 0.05
@@ -73,19 +73,19 @@ no_clearing_opts = LoPhatOptions(min_chunk_len=1, clearing=False)
 # print(tic2 - tic1)
 # time.sleep(2)
 #
-# print("Normal no clearing")
-# matrix = [get_sparse_boundary(f_val[0]) for f_val in s_tree2.get_filtration()]
-# tic1 = time.time()
-# diagram2 = compute_pairings(matrix, no_clearing_opts)
-# tic2 = time.time()
-# print(tic2 - tic1)
-# time.sleep(2)
-
-print("AT clearing")
+print("Normal no clearing")
 matrix = [get_sparse_boundary(f_val[0]) for f_val in s_tree2.get_filtration()]
 print(len(matrix))
 tic1 = time.time()
-diagram3 = compute_pairings_anti_transpose(matrix, clearing_opts)
+diagram2 = compute_pairings(matrix, anti_transpose=False, options=no_clearing_opts)
+tic2 = time.time()
+print(tic2 - tic1)
+time.sleep(2)
+
+print("AT clearing")
+matrix = [get_sparse_boundary(f_val[0]) for f_val in s_tree2.get_filtration()]
+tic1 = time.time()
+diagram3 = compute_pairings(matrix, options=clearing_opts)
 tic2 = time.time()
 print(tic2 - tic1)
 time.sleep(2)
