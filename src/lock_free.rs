@@ -8,24 +8,29 @@ use crossbeam::atomic::AtomicCell;
 use hashbrown::HashSet;
 use pinboard::NonEmptyPinboard;
 use rayon::prelude::*;
+use rayon::ThreadPool;
 use rayon::ThreadPoolBuilder;
 
 /// Stores the matrix and pivot vector behind appropriate atomic data types, as well as the algorithm options.
 /// Provides methods for reducing the matrix in parallel.
-pub struct LockFreeAlgorithm<C: Column + 'static> {
+pub struct LockFreeAlgorithm<'a, C: Column + 'static> {
     matrix: Vec<NonEmptyPinboard<(C, Option<C>)>>,
     pivots: Vec<AtomicCell<Option<usize>>>,
-    options: LoPhatOptions,
+    options: &'a LoPhatOptions,
+    thread_pool: ThreadPool,
+    max_dim: usize,
 }
 
-impl<C: Column + 'static> LockFreeAlgorithm<C> {
-    /// Initialise atomic data structure with provided `matrix`; store algorithm options.
-    pub fn new(matrix: impl Iterator<Item = C>, options: LoPhatOptions) -> Self {
+impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
+    /// Initialise atomic data structure with provided `matrix`, store algorithm options and init thread pool.
+    pub fn new(matrix: impl Iterator<Item = C>, options: &'a LoPhatOptions) -> Self {
+        let mut max_dim = 0;
         let matrix: Vec<_> = matrix
             .enumerate()
             .map(|(idx, r_col)| {
+                max_dim = max_dim.max(r_col.dimension());
                 if options.maintain_v {
-                    let mut v_col = C::default();
+                    let mut v_col = C::new_with_dimension(r_col.dimension());
                     v_col.add_entry(idx);
                     NonEmptyPinboard::new((r_col, Some(v_col)))
                 } else {
@@ -35,10 +40,17 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
             .collect();
         let column_height = options.column_height.unwrap_or(matrix.len());
         let pivots: Vec<_> = (0..column_height).map(|_| AtomicCell::new(None)).collect();
+        // Setup thread pool
+        let thread_pool = ThreadPoolBuilder::new()
+            .num_threads(options.num_threads)
+            .build()
+            .expect("Failed to build thread pool");
         Self {
             matrix,
             pivots,
             options,
+            thread_pool,
+            max_dim,
         }
     }
 
@@ -64,13 +76,13 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
     }
 
     /// Reduces the `j`th column of the matrix as far as possible.
-    /// Will maintain `V` if asked to do so.
     /// If a pivot is found to the right of `j` (e.g. redued by another thread)
     /// then will switch to reducing that column.
     /// It is safe to reduce all columns in parallel.
     pub fn reduce_column(&self, j: usize) {
         let mut working_j = j;
         'outer: loop {
+            //println!("{:?}", working_j);
             let mut curr_column = self.matrix[working_j].read();
             while let Some(l) = (&curr_column).0.pivot() {
                 let piv_with_column_opt = self.get_col_with_pivot(l);
@@ -109,37 +121,67 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
                 }
             }
             // Lines 25-27 (curr_column = 0 clause)
-            if (&curr_column.0).pivot().is_none() {
+            if (&curr_column.0).is_cycle() {
                 self.matrix[working_j].set(curr_column);
                 return;
             }
         }
     }
 
-    /// Reduce all columns in parallel, according to `options`.
-    pub fn reduce(&self) {
-        // Setup thread pool
-        let thread_pool = ThreadPoolBuilder::new()
-            .num_threads(self.options.num_threads)
-            .build()
-            .expect("Failed to build thread pool");
-        // Reduce matrix
-        thread_pool.install(|| {
-            // TODO: How to avoid assigning a vec of idcs for each chunk?
-            // TODO: How to avoid specific chunk len using with_{min/max}_len from rayon?
+    /// Uses the boundary built up in column `boudary_idx` to clear the column corresponding to its pivot
+    pub fn clear_with_column(&self, boudary_idx: usize) {
+        let (boundary_r, _boundary_v) = self.matrix[boudary_idx].read();
+        let clearing_idx = boundary_r
+            .pivot()
+            .expect("Attempted to clear using cycle column");
+        let clearing_dimension = self.matrix[clearing_idx].read().0.dimension();
+        // The cleared R column is empty
+        let r_col = C::new_with_dimension(clearing_dimension);
+        // The corresponding R column should be the R column of the boundary
+        let v_col = self
+            .options
+            .maintain_v
+            .then_some(boundary_r.with_dimension(clearing_dimension));
+        self.matrix[clearing_idx].set((r_col, v_col));
+    }
+
+    /// Reduce all columns of given dimension in parallel, according to `options`.
+    pub fn reduce_dimension(&self, dimension: usize) {
+        // Reduce matrix for columns of that dimension
+        self.thread_pool.install(|| {
             (0..self.matrix.len())
                 .into_par_iter()
-                .chunks(self.options.max_chunk_len)
-                .for_each(|chunk| {
-                    for j in chunk {
-                        self.reduce_column(j)
-                    }
-                });
+                .with_min_len(self.options.min_chunk_len)
+                .filter(|&j| self.matrix[j].read().0.dimension() == dimension)
+                .for_each(|j| self.reduce_column(j));
         });
+    }
+
+    /// Clear all columns of given dimension in parallel
+    pub fn clear_dimension(&self, dimension: usize) {
+        // Reduce matrix for columns of that dimension
+        self.thread_pool.install(|| {
+            (0..self.matrix.len())
+                .into_par_iter()
+                .with_min_len(self.options.min_chunk_len)
+                .filter(|&j| self.matrix[j].read().0.dimension() == dimension)
+                .filter(|&j| self.matrix[j].read().0.is_boundary())
+                .for_each(|j| self.clear_with_column(j));
+        });
+    }
+
+    /// Reduce all columns in parallel, according to `options`.
+    pub fn reduce(&self) {
+        for dimension in (0..=self.max_dim).rev() {
+            self.reduce_dimension(dimension);
+            if self.options.clearing && dimension > 0 {
+                self.clear_dimension(dimension)
+            }
+        }
     }
 }
 
-impl<C: Column + 'static> DiagramReadOff for LockFreeAlgorithm<C> {
+impl<'a, C: Column + 'static> DiagramReadOff for LockFreeAlgorithm<'a, C> {
     fn diagram(&self) -> crate::PersistenceDiagram {
         let paired: HashSet<(usize, usize)> = self
             .matrix
@@ -159,7 +201,7 @@ impl<C: Column + 'static> DiagramReadOff for LockFreeAlgorithm<C> {
     }
 }
 
-impl<C: Column + 'static> From<LockFreeAlgorithm<C>> for RVDecomposition<C> {
+impl<'a, C: Column + 'static> From<LockFreeAlgorithm<'a, C>> for RVDecomposition<C> {
     fn from(algo: LockFreeAlgorithm<C>) -> Self {
         let (r, v) = if algo.options.maintain_v {
             let (r_sub, v_sub) = algo
@@ -189,7 +231,7 @@ impl<C: Column + 'static> From<LockFreeAlgorithm<C>> for RVDecomposition<C> {
 /// * `options` - additional options to control decompositon, see [`LoPhatOptions`].
 pub fn rv_decompose_lock_free<C: Column + 'static>(
     matrix: impl Iterator<Item = C>,
-    options: LoPhatOptions,
+    options: &LoPhatOptions,
 ) -> LockFreeAlgorithm<C> {
     let algo = LockFreeAlgorithm::new(matrix, options);
     algo.reduce();
@@ -209,9 +251,9 @@ mod tests {
     proptest! {
         #[test]
         fn lockfree_agrees_with_serial( matrix in sut_matrix(100) ) {
-            let options = LoPhatOptions { maintain_v: false, column_height: None, num_threads: 0, max_chunk_len: 100 };
-            let serial_dgm = rv_decompose_serial(matrix.iter().cloned(), options).diagram();
-            let parallel_dgm = rv_decompose_lock_free(matrix.into_iter(), options).diagram();
+            let options = LoPhatOptions::default();
+            let serial_dgm = rv_decompose_serial(matrix.iter().cloned(), &options).diagram();
+            let parallel_dgm = rv_decompose_lock_free(matrix.into_iter(), &options).diagram();
             assert_eq!(serial_dgm, parallel_dgm);
         }
     }
@@ -234,7 +276,7 @@ mod tests {
         hash_set(0..max_idx, 0..max_idx).prop_map(|set| {
             let mut col: Vec<_> = set.into_iter().collect();
             col.sort();
-            VecColumn::from(col)
+            VecColumn::from((0, col))
         })
     }
 }

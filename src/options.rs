@@ -11,10 +11,13 @@ use pyo3::prelude::*;
 ///   If `None`, assumed to be `matrix.collect().len()`.
 ///   All indices must lie in the range `0..column_height`.
 ///   Only relevant for lockfree algorithm.
-/// * `max_chunk_len` - Maximum size of a chunk, given to each thread.
+/// * `min_chunk_len` - When splitting work, don't reduce chunks to smaller than this size.
+///   Only relevant for lockfree algorithm.
+/// * `clearing` - Whether to employ the clearing optimisation.
+///   Note, if input matrix is not square then can't use this optimisation since it assumes D*D = 0.
 ///   Only relevant for lockfree algorithm.
 #[pyclass]
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct LoPhatOptions {
     #[pyo3(get, set)]
     pub maintain_v: bool,
@@ -23,24 +26,28 @@ pub struct LoPhatOptions {
     #[pyo3(get, set)]
     pub column_height: Option<usize>,
     #[pyo3(get, set)]
-    pub max_chunk_len: usize,
+    pub min_chunk_len: usize,
+    #[pyo3(get, set)]
+    pub clearing: bool,
 }
 
 #[pymethods]
 impl LoPhatOptions {
     #[new]
-    #[pyo3(signature = (maintain_v=false, num_threads=0, column_height=None, max_chunk_len=1))]
+    #[pyo3(signature = (maintain_v=false, num_threads=0, column_height=None, min_chunk_len=1, clearing=true))]
     fn new(
         maintain_v: bool,
         num_threads: usize,
         column_height: Option<usize>,
-        max_chunk_len: usize,
+        min_chunk_len: usize,
+        clearing: bool,
     ) -> Self {
         LoPhatOptions {
             maintain_v,
             num_threads,
             column_height,
-            max_chunk_len,
+            min_chunk_len,
+            clearing,
         }
     }
 }
@@ -51,7 +58,8 @@ impl Default for LoPhatOptions {
             maintain_v: false,
             num_threads: 0,
             column_height: None,
-            max_chunk_len: 1,
+            min_chunk_len: 1,
+            clearing: true,
         }
     }
 }

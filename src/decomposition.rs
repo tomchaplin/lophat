@@ -33,7 +33,7 @@ impl<C: Column> RVDecomposition<C> {
         let maintain_v = self.v.is_some();
         let mut v_col: Option<C> = None;
         if maintain_v {
-            let mut v_col_internal = C::default();
+            let mut v_col_internal = C::new_with_dimension(column.dimension());
             v_col_internal.add_entry(self.r.len());
             v_col = Some(v_col_internal);
         }
@@ -89,7 +89,7 @@ impl<C: Column> DiagramReadOff for RVDecomposition<C> {
 /// * `options` - additional options to control decompositon, see [`LoPhatOptions`].
 pub fn rv_decompose_serial<C: Column>(
     matrix: impl Iterator<Item = C>,
-    options: LoPhatOptions,
+    options: &LoPhatOptions,
 ) -> RVDecomposition<C> {
     let mut low_inverse = HashMap::new();
     let init_rv = if options.maintain_v {
@@ -114,20 +114,20 @@ mod tests {
 
     fn build_sphere_triangulation() -> impl Iterator<Item = VecColumn> {
         vec![
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![0, 1],
-            vec![0, 2],
-            vec![1, 2],
-            vec![0, 3],
-            vec![1, 3],
-            vec![2, 3],
-            vec![4, 7, 8],
-            vec![5, 7, 9],
-            vec![6, 8, 9],
-            vec![4, 5, 6],
+            (0, vec![]),
+            (0, vec![]),
+            (0, vec![]),
+            (0, vec![]),
+            (1, vec![0, 1]),
+            (1, vec![0, 2]),
+            (1, vec![1, 2]),
+            (1, vec![0, 3]),
+            (1, vec![1, 3]),
+            (1, vec![2, 3]),
+            (2, vec![4, 7, 8]),
+            (2, vec![5, 7, 9]),
+            (2, vec![6, 8, 9]),
+            (2, vec![4, 5, 6]),
         ]
         .into_iter()
         .map(|col| col.into())
@@ -141,7 +141,7 @@ mod tests {
             paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
         };
         let options = LoPhatOptions::default();
-        let computed_diagram = rv_decompose_serial(matrix, options).diagram();
+        let computed_diagram = rv_decompose_serial(matrix, &options).diagram();
         assert_eq!(computed_diagram, correct_diagram)
     }
 
@@ -154,7 +154,7 @@ mod tests {
             unpaired: HashSet::from_iter(vec![0, 13]),
             paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
         };
-        let decomp = rv_decompose_serial(matrix, options);
+        let decomp = rv_decompose_serial(matrix, &options);
         let computed_diagram = decomp.diagram();
         for col in decomp.v.unwrap() {
             println!("{:?}", col);
