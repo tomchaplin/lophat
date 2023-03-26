@@ -57,13 +57,15 @@ For example usage, see the file `example.py` or [this Google colab notebook](htt
 
 ## TODO
 
-- [ ] Implement clearing optimisation when V not required
 - [ ] Increase property testing
 - [ ] Write unit tests
+- [ ] Write integration tests (testing V) 
 - [ ] Benchmark
 - [ ] Add alternative column representations
 - [ ] Implement a `LoPhatOptionsBuilder` in Rust and Python
 - [ ] Abstract out matrix trait
+- [ ] Reduce memory usage when V not maintained
+- [ ] Fix example python script and add example Rust usage
 
 ## References
 
