@@ -1,6 +1,7 @@
 from lophat import compute_pairings, LoPhatOptions
 
-# Note that I don't tell lophat what dimension my columns are
+# Note that I have to tell lophat what dimension my columns are
+# This information is used for the clearing optimisation
 matrix = [
     (0, []),
     (0, []),
