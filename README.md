@@ -66,6 +66,7 @@ For example usage, see the file `example.py` or [this Google colab notebook](htt
 - [ ] Abstract out matrix trait
 - [ ] Reduce memory usage when V not maintained
 - [ ] Add example Rust usage
+- [ ] Add support for returning generators (needs different logic depending on whether homology or cohomology was computed).
 
 ## References
 
