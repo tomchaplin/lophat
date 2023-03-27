@@ -31,11 +31,7 @@ pub fn anti_transpose<C: Column>(matrix: &Vec<C>) -> Vec<C> {
     let mut return_matrix: Vec<_> = matrix
         .iter()
         .rev()
-        .map(|col| {
-            col.clone()
-                .with_clear_boundary()
-                .with_dimension(max_dim - col.dimension())
-        })
+        .map(|col| C::new_with_dimension(max_dim - col.dimension()))
         .collect();
     for (j, col) in matrix.iter().enumerate() {
         for i in col.boundary().iter() {

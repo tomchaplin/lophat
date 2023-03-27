@@ -18,8 +18,6 @@ pub trait Column: Sync + Clone + Send {
     fn new_with_dimension(dimension: usize) -> Self;
     /// Change column to provided dimension
     fn with_dimension(self, dimension: usize) -> Self;
-    /// Clear out the boundary of self
-    fn with_clear_boundary(self) -> Self;
     // TODO: Change to arbitrary iterator return type
     /// Returns the boundary of the columns as a vector of non-zero indices
     fn boundary(&self) -> &Vec<usize>;
@@ -106,11 +104,6 @@ impl Column for VecColumn {
 
     fn boundary(&self) -> &Vec<usize> {
         &self.boundary
-    }
-
-    fn with_clear_boundary(mut self) -> Self {
-        self.boundary.clear();
-        self
     }
 }
 
