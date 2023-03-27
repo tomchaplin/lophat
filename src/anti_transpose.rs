@@ -1,5 +1,3 @@
-use hashbrown::HashSet;
-
 use crate::{Column, PersistenceDiagram};
 
 /// Re-indexes a persistence diagram, assuming that it was produced from an anti-transposed matrix.
@@ -14,13 +12,13 @@ pub fn anti_transpose_diagram(
         .into_iter()
         .map(|(b, d)| (matrix_size - 1 - d, matrix_size - 1 - b))
         .collect();
+    let new_unpaired = diagram
+        .unpaired
+        .into_iter()
+        .map(|idx| matrix_size - 1 - idx)
+        .collect();
     diagram.paired = new_paired;
-    let mut unpaired: HashSet<usize> = (0..matrix_size).collect();
-    for (birth, death) in diagram.paired.iter() {
-        unpaired.remove(birth);
-        unpaired.remove(death);
-    }
-    diagram.unpaired = unpaired;
+    diagram.unpaired = new_unpaired;
     diagram
 }
 
@@ -33,7 +31,11 @@ pub fn anti_transpose<C: Column>(matrix: &Vec<C>) -> Vec<C> {
     let mut return_matrix: Vec<_> = matrix
         .iter()
         .rev()
-        .map(|col| C::new_with_dimension(max_dim - col.dimension()))
+        .map(|col| {
+            col.clone()
+                .with_clear_boundary()
+                .with_dimension(max_dim - col.dimension())
+        })
         .collect();
     for (j, col) in matrix.iter().enumerate() {
         for i in col.boundary().iter() {
