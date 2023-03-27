@@ -62,8 +62,8 @@ opts = LoPhatOptions(num_threads=1)
 
 
 print("Starting runs")
-clearing_opts = LoPhatOptions(min_chunk_len=1, clearing=True)
-no_clearing_opts = LoPhatOptions(min_chunk_len=1, clearing=False)
+clearing_opts = LoPhatOptions(clearing=True)
+no_clearing_opts = LoPhatOptions(clearing=False)
 
 # print("Normal clearing")
 # matrix = [get_sparse_boundary(f_val[0]) for f_val in s_tree2.get_filtration()]

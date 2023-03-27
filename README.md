@@ -65,7 +65,7 @@ For example usage, see the file `example.py` or [this Google colab notebook](htt
 - [ ] Implement a `LoPhatOptionsBuilder` in Rust and Python
 - [ ] Abstract out matrix trait
 - [ ] Reduce memory usage when V not maintained
-- [ ] Fix example python script and add example Rust usage
+- [ ] Add example Rust usage
 
 ## References
 

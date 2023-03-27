@@ -19,18 +19,20 @@ matrix = [
     (2, [4, 5, 6]),
 ]
 
-# Can pass in matrix either as List[List[int]] or Iterator[List[int]]
+# Can pass in matrix either as List[...] or Iterator[...]
 
-dgm_iter = compute_pairings(matrix, anti_transpose=False)
-dgm_list = compute_pairings(iter(matrix), anti_transpose=False)
+dgm_iter = compute_pairings(matrix)
+dgm_list = compute_pairings(iter(matrix))
 
 # Can optionally provide a LoPhatOptions
 # Don't maintain V, use 4 threads, assume matrix is square,
-# ensure each thread gets at most 2 colums at a time
-opts = LoPhatOptions(False, 4, None, 2)
+# ensure each thread gets at least 2 colums at a time,
+# turn off clearing optimisation
+opts = LoPhatOptions(
+    maintain_v=False, num_threads=4, column_height=None, min_chunk_len=2, clearing=False
+)
+# Don't anti-transpose matrix before computing pairings
 dgm_custom = compute_pairings(matrix, anti_transpose=False, options=opts)
-
-dgm_at = compute_pairings(matrix, options=opts)
 
 print("Iterator:")
 print(dgm_iter)
@@ -41,9 +43,5 @@ print(dgm_list)
 print("Custom:")
 print(dgm_custom)
 
-print("Anti-Transpose:")
-print(dgm_at)
-
 assert dgm_iter == dgm_custom
 assert dgm_iter == dgm_list
-assert dgm_iter == dgm_at
