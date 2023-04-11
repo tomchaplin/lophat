@@ -9,6 +9,8 @@
 [![docs.rs](https://img.shields.io/docsrs/lophat?label=Docs.rs)](https://docs.rs/lophat/latest/lophat/)
 [![Read the Docs](https://img.shields.io/readthedocs/lophat?label=Read%20The%20Docs)](https://lophat.readthedocs.io/en/latest/)
 
+Try in: [Your Browser](https://lophat.tomchaplin.xyz/) • [Google Colab](https://colab.research.google.com/drive/1y0_wZfvuUZfRreYPO50mo4rBlflkMcfj?usp=sharing)
+
 </div>
 
 ## Overview
