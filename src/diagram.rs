@@ -1,5 +1,9 @@
 use hashbrown::HashSet;
+
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
+
+#[cfg(feature = "python")]
 /// Stores the pairings from a matrix decomposition,
 /// as well as those columns which did not appear in a pairing.
 #[pyclass]
@@ -8,6 +12,15 @@ pub struct PersistenceDiagram {
     #[pyo3(get)]
     pub unpaired: HashSet<usize>,
     #[pyo3(get)]
+    pub paired: HashSet<(usize, usize)>,
+}
+
+#[cfg(not(feature = "python"))]
+/// Stores the pairings from a matrix decomposition,
+/// as well as those columns which did not appear in a pairing.
+#[derive(Default, Debug, Clone, PartialEq)]
+pub struct PersistenceDiagram {
+    pub unpaired: HashSet<usize>,
     pub paired: HashSet<(usize, usize)>,
 }
 
@@ -21,6 +34,7 @@ impl std::fmt::Display for PersistenceDiagram {
     }
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl PersistenceDiagram {
     fn __richcmp__(&self, other: &PyAny, cmp_op: pyo3::basic::CompareOp) -> bool {
