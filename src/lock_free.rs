@@ -71,7 +71,14 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
                 .expect("Failed to build thread pool"),
         );
         #[cfg(not(feature = "local_thread_pool"))]
-        let thread_pool = LoPhatThreadPool::Global();
+        let thread_pool = {
+            if options.num_threads != 0 {
+                panic!(
+                    "To specify a number of threads, please enable the local_thread_pool feature"
+                );
+            }
+            LoPhatThreadPool::Global()
+        };
         // Return options
         Self {
             matrix,
