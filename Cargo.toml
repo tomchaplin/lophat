@@ -1,6 +1,6 @@
 [package]
 name = "lophat"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2021"
 license = "MIT"
 description = "Lockfree Persistent Homology Algorithm Toolbox"
@@ -18,8 +18,13 @@ crate-type = ["lib", "cdylib"]
 crossbeam = "0.8.2"
 hashbrown = { version = "0.13.2", features = ["rayon"] }
 pinboard = "2.1.0"
-pyo3 = { version = "0.18.1", features = ["hashbrown", "extension-module"] }
+pyo3 = { version = "0.18.1", features = ["hashbrown", "extension-module"], optional=true }
 rayon = "1.7.0"
+
+[features]
+default = ["python", "local_thread_pool"]
+python = ["dep:pyo3"]
+local_thread_pool = []
 
 [dev-dependencies]
 proptest = "1.1.0"

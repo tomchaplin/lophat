@@ -10,9 +10,6 @@
 //! If you would like to force the use of the serial or parallel algorithm,
 //! use [`rv_decompose_serial`] or [`rv_decompose_lock_free`] respectively.
 
-use pyo3::prelude::*;
-use pyo3::types::PyIterator;
-
 mod anti_transpose;
 mod column;
 mod decomposition;
@@ -45,6 +42,12 @@ pub fn rv_decompose<C: Column + 'static>(
     }
 }
 
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+#[cfg(feature = "python")]
+use pyo3::types::PyIterator;
+
+#[cfg(feature = "python")]
 fn compute_pairings_rs<C: Column + 'static>(
     matrix: impl Iterator<Item = C>,
     options: &LoPhatOptions,
@@ -56,6 +59,7 @@ fn compute_pairings_rs<C: Column + 'static>(
     }
 }
 
+#[cfg(feature = "python")]
 fn compute_pairings_anti_transpose(
     py: Python<'_>,
     matrix: &PyAny,
@@ -82,6 +86,7 @@ fn compute_pairings_anti_transpose(
     anti_transpose_diagram(dgm, width)
 }
 
+#[cfg(feature = "python")]
 fn compute_pairings_non_transpose(
     py: Python<'_>,
     matrix: &PyAny,
@@ -103,6 +108,7 @@ fn compute_pairings_non_transpose(
     }
 }
 
+#[cfg(feature = "python")]
 #[pyfunction]
 #[pyo3(signature = (matrix,anti_transpose= true, options=None))]
 fn compute_pairings(
@@ -120,6 +126,7 @@ fn compute_pairings(
 
 /// A Python module implemented in Rust.
 #[pymodule]
+#[cfg(feature = "python")]
 fn lophat(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_pairings, m)?)?;
     m.add_class::<LoPhatOptions>()?;

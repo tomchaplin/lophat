@@ -8,8 +8,30 @@ use crossbeam::atomic::AtomicCell;
 use hashbrown::HashSet;
 use pinboard::NonEmptyPinboard;
 use rayon::prelude::*;
-use rayon::ThreadPool;
+#[cfg(feature = "local_thread_pool")]
 use rayon::ThreadPoolBuilder;
+
+enum LoPhatThreadPool {
+    #[cfg(not(feature = "local_thread_pool"))]
+    Global(),
+    #[cfg(feature = "local_thread_pool")]
+    Local(rayon::ThreadPool),
+}
+
+impl LoPhatThreadPool {
+    fn install<OP, R>(&self, op: OP) -> R
+    where
+        OP: FnOnce() -> R + Send,
+        R: Send,
+    {
+        match self {
+            #[cfg(not(feature = "local_thread_pool"))]
+            LoPhatThreadPool::Global() => op(),
+            #[cfg(feature = "local_thread_pool")]
+            LoPhatThreadPool::Local(pool) => pool.install(op),
+        }
+    }
+}
 
 /// Stores the matrix and pivot vector behind appropriate atomic data types, as well as the algorithm options.
 /// Provides methods for reducing the matrix in parallel.
@@ -17,7 +39,7 @@ pub struct LockFreeAlgorithm<'a, C: Column + 'static> {
     matrix: Vec<NonEmptyPinboard<(C, Option<C>)>>,
     pivots: Vec<AtomicCell<Option<usize>>>,
     options: &'a LoPhatOptions,
-    thread_pool: ThreadPool,
+    thread_pool: LoPhatThreadPool,
     max_dim: usize,
 }
 
@@ -41,10 +63,23 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
         let column_height = options.column_height.unwrap_or(matrix.len());
         let pivots: Vec<_> = (0..column_height).map(|_| AtomicCell::new(None)).collect();
         // Setup thread pool
-        let thread_pool = ThreadPoolBuilder::new()
-            .num_threads(options.num_threads)
-            .build()
-            .expect("Failed to build thread pool");
+        #[cfg(feature = "local_thread_pool")]
+        let thread_pool = LoPhatThreadPool::Local(
+            ThreadPoolBuilder::new()
+                .num_threads(options.num_threads)
+                .build()
+                .expect("Failed to build thread pool"),
+        );
+        #[cfg(not(feature = "local_thread_pool"))]
+        let thread_pool = {
+            if options.num_threads != 0 {
+                panic!(
+                    "To specify a number of threads, please enable the local_thread_pool feature"
+                );
+            }
+            LoPhatThreadPool::Global()
+        };
+        // Return options
         Self {
             matrix,
             pivots,
