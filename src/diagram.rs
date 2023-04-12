@@ -3,21 +3,9 @@ use hashbrown::HashSet;
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
-#[cfg(feature = "python")]
 /// Stores the pairings from a matrix decomposition,
 /// as well as those columns which did not appear in a pairing.
-#[pyclass]
-#[derive(Default, Debug, Clone, PartialEq)]
-pub struct PersistenceDiagram {
-    #[pyo3(get)]
-    pub unpaired: HashSet<usize>,
-    #[pyo3(get)]
-    pub paired: HashSet<(usize, usize)>,
-}
-
-#[cfg(not(feature = "python"))]
-/// Stores the pairings from a matrix decomposition,
-/// as well as those columns which did not appear in a pairing.
+#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct PersistenceDiagram {
     pub unpaired: HashSet<usize>,

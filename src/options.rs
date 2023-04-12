@@ -1,7 +1,6 @@
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
-#[cfg(feature = "python")]
 /// A simple struct for specifying options for R=DV decompositions
 ///
 /// * `maintain_v` - if true, returns full R=DV decomposition,
@@ -18,38 +17,7 @@ use pyo3::prelude::*;
 /// * `clearing` - Whether to employ the clearing optimisation.
 ///   Note, if input matrix is not square then can't use this optimisation since it assumes D*D = 0.
 ///   Only relevant for lockfree algorithm.
-#[pyclass]
-#[derive(Clone)]
-pub struct LoPhatOptions {
-    #[pyo3(get, set)]
-    pub maintain_v: bool,
-    #[pyo3(get, set)]
-    pub num_threads: usize,
-    #[pyo3(get, set)]
-    pub column_height: Option<usize>,
-    #[pyo3(get, set)]
-    pub min_chunk_len: usize,
-    #[pyo3(get, set)]
-    pub clearing: bool,
-}
-
-#[cfg(not(feature = "python"))]
-/// A simple struct for specifying options for R=DV decompositions
-///
-/// * `maintain_v` - if true, returns full R=DV decomposition,
-///   otherwise returns [`RVDecomposition`](crate::RVDecomposition) with field `v` set to `None`.
-/// * `n_threads` - number of threads to use in thread pool; ignored by serial algorithms.
-///   see [`num_threads`](rayon::ThreadPoolBuilder::num_threads) for more details.
-///   Only relevant for lockfree algorithm.
-/// * `column_height` - an optional hint to the height of the columns.
-///   If `None`, assumed to be `matrix.collect().len()`.
-///   All indices must lie in the range `0..column_height`.
-///   Only relevant for lockfree algorithm.
-/// * `min_chunk_len` - When splitting work, don't reduce chunks to smaller than this size.
-///   Only relevant for lockfree algorithm.
-/// * `clearing` - Whether to employ the clearing optimisation.
-///   Note, if input matrix is not square then can't use this optimisation since it assumes D*D = 0.
-///   Only relevant for lockfree algorithm.
+#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
 #[derive(Clone)]
 pub struct LoPhatOptions {
     pub maintain_v: bool,
