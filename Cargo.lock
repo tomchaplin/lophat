@@ -260,6 +260,7 @@ dependencies = [
 name = "lophat"
 version = "0.8.1"
 dependencies = [
+ "bit-set",
  "crossbeam",
  "hashbrown",
  "pinboard",

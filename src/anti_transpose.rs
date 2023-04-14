@@ -34,7 +34,7 @@ pub fn anti_transpose<C: Column>(matrix: &Vec<C>) -> Vec<C> {
         .map(|col| C::new_with_dimension(max_dim - col.dimension()))
         .collect();
     for (j, col) in matrix.iter().enumerate() {
-        for i in col.boundary().iter() {
+        for i in col.entries() {
             return_matrix[matrix_width - 1 - i].add_entry(matrix_width - 1 - j);
         }
     }

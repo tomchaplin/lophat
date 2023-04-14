@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
 
+use bit_set::BitSet;
+
 /// Structs implementing `Column` represent columns of a `usize`-indexed matrix,
 /// over the field F_2.
 pub trait Column: Sync + Clone + Send {
@@ -18,14 +20,22 @@ pub trait Column: Sync + Clone + Send {
     fn new_with_dimension(dimension: usize) -> Self;
     /// Change column to provided dimension
     fn with_dimension(self, dimension: usize) -> Self;
-    // TODO: Change to arbitrary iterator return type
-    /// Returns the boundary of the columns as a vector of non-zero indices
-    fn boundary(&self) -> &Vec<usize>;
+    /// The output type of [`Self::entries`]
+    type EntriesIter<'a>: Iterator<Item = usize>
+    where
+        Self: 'a;
+    /// Returns the entries of the columns as an iterator over the non-zero indices (not necessarily sorted)
+    fn entries<'a>(&'a self) -> Self::EntriesIter<'a>;
 
+    /// Returns whether or not the column is a cycle, i.e. has no entries.
+    /// Provided implementation makes call to [`Self::pivot`].
+    /// You may wish to provide a more efficient implementation
     fn is_cycle(&self) -> bool {
         self.pivot().is_none()
     }
 
+    /// Returns whether or not the column is a boundary, i.e. is non-empty.
+    /// Provided implementation negates [`Self::is_cycle`]
     fn is_boundary(&self) -> bool {
         !self.is_cycle()
     }
@@ -102,8 +112,14 @@ impl Column for VecColumn {
         self
     }
 
-    fn boundary(&self) -> &Vec<usize> {
-        &self.boundary
+    type EntriesIter<'a> = std::iter::Copied<std::slice::Iter<'a, usize>>;
+
+    fn entries<'a>(&'a self) -> Self::EntriesIter<'a> {
+        self.boundary.iter().copied()
+    }
+
+    fn is_cycle(&self) -> bool {
+        self.boundary.is_empty()
     }
 }
 
@@ -115,5 +131,59 @@ impl From<(usize, Vec<usize>)> for VecColumn {
             boundary,
             dimension,
         }
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct BitSetColumn {
+    pub boundary: BitSet,
+    pub dimension: usize,
+}
+
+impl Column for BitSetColumn {
+    fn pivot(&self) -> Option<usize> {
+        self.boundary.iter().max()
+    }
+
+    fn add_col(&mut self, other: &Self) {
+        self.boundary.symmetric_difference_with(&other.boundary);
+    }
+
+    fn add_entry(&mut self, entry: usize) {
+        if self.has_entry(&entry) {
+            self.boundary.remove(entry);
+        } else {
+            self.boundary.insert(entry);
+        }
+    }
+
+    fn has_entry(&self, entry: &usize) -> bool {
+        self.boundary.contains(*entry)
+    }
+
+    fn dimension(&self) -> usize {
+        self.dimension
+    }
+
+    fn new_with_dimension(dimension: usize) -> Self {
+        Self {
+            boundary: BitSet::new(),
+            dimension,
+        }
+    }
+
+    fn with_dimension(mut self, dimension: usize) -> Self {
+        self.dimension = dimension;
+        self
+    }
+
+    type EntriesIter<'a> = bit_set::Iter<'a, u32>;
+
+    fn entries<'a>(&'a self) -> Self::EntriesIter<'a> {
+        self.boundary.iter()
+    }
+
+    fn is_cycle(&self) -> bool {
+        self.boundary.is_empty()
     }
 }
