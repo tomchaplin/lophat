@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use bit_set::BitSet;
 
 /// Structs implementing `Column` represent columns of a `usize`-indexed matrix,
-/// over the field F_2.
+/// over the finite field F_2.
 pub trait Column: Sync + Clone + Send {
     /// Returns the index of the lowest non-zero column, or `None` if the column is empty.
     fn pivot(&self) -> Option<usize>;
@@ -14,7 +14,7 @@ pub trait Column: Sync + Clone + Send {
     fn add_entry(&mut self, entry: usize);
     /// Return whether or not entry appears with value 1 in the column
     fn has_entry(&self, entry: &usize) -> bool;
-    /// Return the dimension of this column
+    /// Return the dimension of this column (assuming the matrix represents a chain complex boundary matrix)
     fn dimension(&self) -> usize;
     /// Init an empty column with the given dimension
     fn new_with_dimension(dimension: usize) -> Self;
@@ -39,15 +39,22 @@ pub trait Column: Sync + Clone + Send {
     fn is_boundary(&self) -> bool {
         !self.is_cycle()
     }
+
+    /// Uses [`Self::add_entry`] to add elements from the iterator to the column
+    fn add_entries<B: Iterator<Item = usize>>(&mut self, entries: B) {
+        for entry in entries {
+            self.add_entry(entry);
+        }
+    }
 }
 
 /// A [`Column`]-implementing struct, representing the column by an increasing vector of the non-zero indices.
 ///
-/// To construct call [`VecColumn::from`].
+/// To construct call [`VecColumn::from`] or use [`VecColumn::new_with_dimension`] and [`VecColumn::add_entries`]
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct VecColumn {
-    pub boundary: Vec<usize>,
-    pub dimension: usize,
+    boundary: Vec<usize>,
+    dimension: usize,
 }
 
 impl VecColumn {
@@ -124,8 +131,8 @@ impl Column for VecColumn {
 }
 
 impl From<(usize, Vec<usize>)> for VecColumn {
-    /// Constructs a `VecColumn`, consuming `internal`, where
-    /// `internal` is the vector of non-zero indices, sorted in increasing order.
+    /// Constructs a `VecColumn`, from a tuple where
+    /// `boundary` is the vector of non-zero indices, sorted in increasing order.
     fn from((dimension, boundary): (usize, Vec<usize>)) -> Self {
         Self {
             boundary,
@@ -134,10 +141,13 @@ impl From<(usize, Vec<usize>)> for VecColumn {
     }
 }
 
+/// A [`Column`]-implementing struct, representing the column by a bit set of the non-zero indices.
+///
+/// To construct call [`BitSetColumn::from`] or use [`BitSetColumn::new_with_dimension`] and [`BitSetColumn::add_entries`]
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct BitSetColumn {
-    pub boundary: BitSet,
-    pub dimension: usize,
+    boundary: BitSet,
+    dimension: usize,
 }
 
 impl Column for BitSetColumn {
@@ -185,5 +195,20 @@ impl Column for BitSetColumn {
 
     fn is_cycle(&self) -> bool {
         self.boundary.is_empty()
+    }
+}
+
+impl From<(usize, Vec<usize>)> for BitSetColumn {
+    /// Constructs a `BitSetColumn`, from a tuple where
+    /// `boundary_vec` is the vector of non-zero indices, sorted in increasing order.
+    fn from((dimension, boundary_vec): (usize, Vec<usize>)) -> Self {
+        let mut boundary_set = BitSet::with_capacity(boundary_vec.len());
+        for elem in boundary_vec {
+            boundary_set.insert(elem);
+        }
+        Self {
+            boundary: boundary_set,
+            dimension,
+        }
     }
 }

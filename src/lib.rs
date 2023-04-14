@@ -16,14 +16,16 @@ mod decomposition;
 mod diagram;
 mod indexing;
 mod lock_free;
+mod locking;
 mod options;
 
-pub use crate::column::{Column, VecColumn};
+pub use crate::column::{BitSetColumn, Column, VecColumn};
 pub use crate::decomposition::{rv_decompose_serial, RVDecomposition};
 pub use crate::diagram::{DiagramReadOff, PersistenceDiagram};
 //pub use crate::indexing::{IndexMap, VecIndexMap};
 pub use crate::anti_transpose::*;
 pub use crate::lock_free::{rv_decompose_lock_free, LockFreeAlgorithm};
+pub use crate::locking::{rv_decompose_locking, LockingAlgorithm};
 pub use crate::options::LoPhatOptions;
 
 /// Decomposes the input matrix, choosing between the serial and parallel
