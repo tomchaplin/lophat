@@ -4,7 +4,10 @@ use bit_set::BitSet;
 
 /// Structs implementing `Column` represent columns of a `usize`-indexed matrix,
 /// over the finite field F_2.
-pub trait Column: Sync + Clone + Send {
+///
+/// Note the requirement to implement `From<(usize, Self::EntriesRepr)>`.
+/// The `usize` is the dimension and `Self::EntriesRepr` is the entries in the column.
+pub trait Column: Sync + Clone + Send + From<(usize, Self::EntriesRepr)> {
     /// Returns the index of the lowest non-zero column, or `None` if the column is empty.
     fn pivot(&self) -> Option<usize>;
     /// Adds one copy of `other` into `self`
@@ -14,18 +17,21 @@ pub trait Column: Sync + Clone + Send {
     fn add_entry(&mut self, entry: usize);
     /// Return whether or not entry appears with value 1 in the column
     fn has_entry(&self, entry: &usize) -> bool;
-    /// Return the dimension of this column (assuming the matrix represents a chain complex boundary matrix)
-    fn dimension(&self) -> usize;
-    /// Init an empty column with the given dimension
-    fn new_with_dimension(dimension: usize) -> Self;
-    /// Change column to provided dimension
-    fn with_dimension(self, dimension: usize) -> Self;
     /// The output type of [`Self::entries`]
     type EntriesIter<'a>: Iterator<Item = usize>
     where
         Self: 'a;
     /// Returns the entries of the columns as an iterator over the non-zero indices (not necessarily sorted)
     fn entries<'a>(&'a self) -> Self::EntriesIter<'a>;
+    /// A format that the user can provide the entries of the column in, in order to efficiently construct the column.
+    /// The `Default` should correspond to the empty column
+    type EntriesRepr: Default;
+    /// Efficiently override the column, by providing entries in the internal format.
+    fn set_entries(&mut self, entries: Self::EntriesRepr);
+    /// Return the dimension of this column (assuming the matrix represents a chain complex boundary matrix)
+    fn dimension(&self) -> usize;
+    /// Change column to provided dimension
+    fn with_dimension(self, dimension: usize) -> Self;
 
     /// Returns whether or not the column is a cycle, i.e. has no entries.
     /// Provided implementation makes call to [`Self::pivot`].
@@ -45,6 +51,16 @@ pub trait Column: Sync + Clone + Send {
         for entry in entries {
             self.add_entry(entry);
         }
+    }
+
+    /// Init an empty column with the given dimension
+    fn new_with_dimension(dimension: usize) -> Self {
+        Self::from((dimension, Self::EntriesRepr::default()))
+    }
+
+    /// Removes all entries from the column
+    fn clear_entries(&mut self) {
+        self.set_entries(Self::EntriesRepr::default())
     }
 }
 
@@ -103,15 +119,20 @@ impl Column for VecColumn {
         self.boundary.contains(entry)
     }
 
-    fn dimension(&self) -> usize {
-        self.dimension
+    type EntriesIter<'a> = std::iter::Copied<std::slice::Iter<'a, usize>>;
+
+    fn entries<'a>(&'a self) -> Self::EntriesIter<'a> {
+        self.boundary.iter().copied()
     }
 
-    fn new_with_dimension(dimension: usize) -> Self {
-        Self {
-            boundary: vec![],
-            dimension,
-        }
+    type EntriesRepr = Vec<usize>;
+
+    fn set_entries(&mut self, entries: Self::EntriesRepr) {
+        self.boundary = entries;
+    }
+
+    fn dimension(&self) -> usize {
+        self.dimension
     }
 
     fn with_dimension(mut self, dimension: usize) -> Self {
@@ -119,14 +140,15 @@ impl Column for VecColumn {
         self
     }
 
-    type EntriesIter<'a> = std::iter::Copied<std::slice::Iter<'a, usize>>;
-
-    fn entries<'a>(&'a self) -> Self::EntriesIter<'a> {
-        self.boundary.iter().copied()
-    }
-
     fn is_cycle(&self) -> bool {
         self.boundary.is_empty()
+    }
+
+    fn new_with_dimension(dimension: usize) -> Self {
+        Self {
+            boundary: vec![],
+            dimension,
+        }
     }
 }
 
@@ -171,8 +193,29 @@ impl Column for BitSetColumn {
         self.boundary.contains(*entry)
     }
 
+    type EntriesIter<'a> = bit_set::Iter<'a, u32>;
+
+    fn entries<'a>(&'a self) -> Self::EntriesIter<'a> {
+        self.boundary.iter()
+    }
+
+    type EntriesRepr = BitSet;
+
+    fn set_entries(&mut self, entries: Self::EntriesRepr) {
+        self.boundary = entries;
+    }
+
     fn dimension(&self) -> usize {
         self.dimension
+    }
+
+    fn with_dimension(mut self, dimension: usize) -> Self {
+        self.dimension = dimension;
+        self
+    }
+
+    fn is_cycle(&self) -> bool {
+        self.boundary.is_empty()
     }
 
     fn new_with_dimension(dimension: usize) -> Self {
@@ -181,33 +224,14 @@ impl Column for BitSetColumn {
             dimension,
         }
     }
-
-    fn with_dimension(mut self, dimension: usize) -> Self {
-        self.dimension = dimension;
-        self
-    }
-
-    type EntriesIter<'a> = bit_set::Iter<'a, u32>;
-
-    fn entries<'a>(&'a self) -> Self::EntriesIter<'a> {
-        self.boundary.iter()
-    }
-
-    fn is_cycle(&self) -> bool {
-        self.boundary.is_empty()
-    }
 }
 
-impl From<(usize, Vec<usize>)> for BitSetColumn {
+impl From<(usize, BitSet)> for BitSetColumn {
     /// Constructs a `BitSetColumn`, from a tuple where
     /// `boundary_vec` is the vector of non-zero indices, sorted in increasing order.
-    fn from((dimension, boundary_vec): (usize, Vec<usize>)) -> Self {
-        let mut boundary_set = BitSet::with_capacity(boundary_vec.len());
-        for elem in boundary_vec {
-            boundary_set.insert(elem);
-        }
+    fn from((dimension, boundary): (usize, BitSet)) -> Self {
         Self {
-            boundary: boundary_set,
+            boundary,
             dimension,
         }
     }
