@@ -18,7 +18,7 @@ use pyo3::prelude::*;
 ///   Note, if input matrix is not square then can't use this optimisation since it assumes D*D = 0.
 ///   Only relevant for lockfree algorithm.
 #[cfg_attr(feature = "python", pyclass(get_all, set_all))]
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct LoPhatOptions {
     pub maintain_v: bool,
     pub num_threads: usize,

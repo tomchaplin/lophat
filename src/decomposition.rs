@@ -89,7 +89,7 @@ impl<C: Column> DiagramReadOff for RVDecomposition<C> {
 /// * `options` - additional options to control decompositon, see [`LoPhatOptions`].
 pub fn rv_decompose_serial<C: Column>(
     matrix: impl Iterator<Item = C>,
-    options: &LoPhatOptions,
+    options: LoPhatOptions,
 ) -> RVDecomposition<C> {
     let mut low_inverse = HashMap::new();
     let init_rv = if options.maintain_v {
@@ -141,7 +141,7 @@ mod tests {
             paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
         };
         let options = LoPhatOptions::default();
-        let computed_diagram = rv_decompose_serial(matrix, &options).diagram();
+        let computed_diagram = rv_decompose_serial(matrix, options).diagram();
         assert_eq!(computed_diagram, correct_diagram)
     }
 
@@ -154,7 +154,7 @@ mod tests {
             unpaired: HashSet::from_iter(vec![0, 13]),
             paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
         };
-        let decomp = rv_decompose_serial(matrix, &options);
+        let decomp = rv_decompose_serial(matrix, options);
         let computed_diagram = decomp.diagram();
         for col in decomp.v.unwrap() {
             println!("{:?}", col);

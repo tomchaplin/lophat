@@ -35,12 +35,12 @@ pub use crate::options::LoPhatOptions;
 /// * `options` - additional options to control decompositon, see [`LoPhatOptions`].
 pub fn rv_decompose<C: Column + 'static>(
     matrix: impl Iterator<Item = C>,
-    options: &LoPhatOptions,
+    options: LoPhatOptions,
 ) -> RVDecomposition<C> {
     if options.num_threads == 1 {
-        rv_decompose_serial(matrix, &options)
+        rv_decompose_serial(matrix, options)
     } else {
-        rv_decompose_lock_free(matrix, &options).into()
+        rv_decompose_lock_free(matrix, options).into()
     }
 }
 
@@ -52,12 +52,12 @@ use pyo3::types::PyIterator;
 #[cfg(feature = "python")]
 fn compute_pairings_rs<C: Column + 'static>(
     matrix: impl Iterator<Item = C>,
-    options: &LoPhatOptions,
+    options: LoPhatOptions,
 ) -> PersistenceDiagram {
     if options.num_threads == 1 {
-        rv_decompose_serial(matrix, &options).diagram()
+        rv_decompose_serial(matrix, options).diagram()
     } else {
-        rv_decompose_lock_free(matrix, &options).diagram()
+        rv_decompose_lock_free(matrix, options).diagram()
     }
 }
 
@@ -84,7 +84,7 @@ fn compute_pairings_anti_transpose(
         };
     let width = matrix_as_vec.len();
     let at: Vec<_> = anti_transpose(&matrix_as_vec);
-    let dgm = compute_pairings_rs(at.into_iter(), &options);
+    let dgm = compute_pairings_rs(at.into_iter(), options);
     anti_transpose_diagram(dgm, width)
 }
 
@@ -97,14 +97,14 @@ fn compute_pairings_non_transpose(
     let options = options.unwrap_or(LoPhatOptions::default());
     if let Ok(matrix_as_vec) = matrix.extract::<Vec<(usize, Vec<usize>)>>() {
         let matrix_as_rs_iter = matrix_as_vec.into_iter().map(VecColumn::from);
-        compute_pairings_rs(matrix_as_rs_iter, &options)
+        compute_pairings_rs(matrix_as_rs_iter, options)
     } else if let Ok(py_iter) = PyIterator::from_object(py, matrix) {
         let matrix_as_rs_iter = py_iter.map(|col| {
             col.and_then(PyAny::extract::<(usize, Vec<usize>)>)
                 .map(VecColumn::from)
                 .expect("Column is a list of unsigned integers")
         });
-        compute_pairings_rs(matrix_as_rs_iter, &options)
+        compute_pairings_rs(matrix_as_rs_iter, options)
     } else {
         panic!("Could not coerce input matrix into List[List[int]] | Iterator[List[int]]");
     }

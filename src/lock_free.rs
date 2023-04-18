@@ -36,17 +36,18 @@ impl LoPhatThreadPool {
 
 /// Stores the matrix and pivot vector behind appropriate atomic data types, as well as the algorithm options.
 /// Provides methods for reducing the matrix in parallel.
-pub struct LockFreeAlgorithm<'a, C: Column + 'static> {
+pub struct LockFreeAlgorithm<C: Column + 'static> {
     matrix: Vec<NonEmptyPinboard<(C, Option<C>)>>,
     pivots: Vec<AtomicCell<Option<usize>>>,
-    options: &'a LoPhatOptions,
+    options: LoPhatOptions,
     thread_pool: LoPhatThreadPool,
     max_dim: usize,
 }
 
-impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
+impl<C: Column + 'static> LockFreeAlgorithm<C> {
     /// Initialise atomic data structure with provided `matrix`, store algorithm options and init thread pool.
-    pub fn new(matrix: impl Iterator<Item = C>, options: &'a LoPhatOptions) -> Self {
+    pub fn new(matrix: impl Iterator<Item = C>, options: LoPhatOptions) -> Self {
+        Self::warn_if_not_lockfree();
         let mut max_dim = 0;
         let matrix: Vec<_> = matrix
             .enumerate()
@@ -90,6 +91,12 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
         }
     }
 
+    fn warn_if_not_lockfree() {
+        if !AtomicCell::<Option<usize>>::is_lock_free() {
+            eprintln!("WARNING: The pivot vector is locking");
+        }
+    }
+
     /// Return a column with index `l`, if one exists.
     /// If found, returns `(col_idx, col)`, where col is a tuple consisting of the corresponding column in R and V.
     /// If not maintaining V, second entry of tuple is `None`.
@@ -119,7 +126,6 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
         let mut working_j = j;
         'outer: loop {
             // We make a copy of the column because we want to mutate our local copy
-            // without locking other threads from reading
             let mut curr_column = self.matrix[working_j].read();
             while let Some(l) = (&curr_column).0.pivot() {
                 let piv_with_column_opt = self.get_col_with_pivot(l);
@@ -176,10 +182,11 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
         // The cleared R column is empty
         let r_col = C::new_with_dimension(clearing_dimension);
         // The corresponding R column should be the R column of the boundary
-        let v_col = self
-            .options
-            .maintain_v
-            .then_some(boundary_r.clone().with_dimension(clearing_dimension));
+        let v_col = self.options.maintain_v.then(|| {
+            let mut br = boundary_r.clone();
+            br.set_dimension(clearing_dimension);
+            br
+        });
         self.matrix[clearing_idx].set((r_col, v_col));
     }
 
@@ -219,7 +226,7 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
     }
 }
 
-impl<'a, C: Column + 'static> DiagramReadOff for LockFreeAlgorithm<'a, C> {
+impl<'a, C: Column + 'static> DiagramReadOff for LockFreeAlgorithm<C> {
     fn diagram(&self) -> crate::PersistenceDiagram {
         let paired: HashSet<(usize, usize)> = self
             .matrix
@@ -239,7 +246,7 @@ impl<'a, C: Column + 'static> DiagramReadOff for LockFreeAlgorithm<'a, C> {
     }
 }
 
-impl<'a, C: Column + 'static> From<LockFreeAlgorithm<'a, C>> for RVDecomposition<C> {
+impl<C: Column + 'static> From<LockFreeAlgorithm<C>> for RVDecomposition<C> {
     fn from(algo: LockFreeAlgorithm<C>) -> Self {
         let (r, v) = if algo.options.maintain_v {
             let (r_sub, v_sub) = algo
@@ -269,7 +276,7 @@ impl<'a, C: Column + 'static> From<LockFreeAlgorithm<'a, C>> for RVDecomposition
 /// * `options` - additional options to control decompositon, see [`LoPhatOptions`].
 pub fn rv_decompose_lock_free<C: Column + 'static>(
     matrix: impl Iterator<Item = C>,
-    options: &LoPhatOptions,
+    options: LoPhatOptions,
 ) -> LockFreeAlgorithm<C> {
     let algo = LockFreeAlgorithm::new(matrix, options);
     algo.reduce();
@@ -290,8 +297,8 @@ mod tests {
         #[test]
         fn lockfree_agrees_with_serial( matrix in sut_matrix(100) ) {
             let options = LoPhatOptions::default();
-            let serial_dgm = rv_decompose_serial(matrix.iter().cloned(), &options).diagram();
-            let parallel_dgm = rv_decompose_lock_free(matrix.into_iter(), &options).diagram();
+            let serial_dgm = rv_decompose_serial(matrix.iter().cloned(), options).diagram();
+            let parallel_dgm = rv_decompose_lock_free(matrix.into_iter(), options).diagram();
             assert_eq!(serial_dgm, parallel_dgm);
         }
     }
