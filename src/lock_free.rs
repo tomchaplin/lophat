@@ -6,6 +6,7 @@ use crate::RVDecomposition;
 
 use crossbeam::atomic::AtomicCell;
 use hashbrown::HashSet;
+use pinboard::GuardedRef;
 use pinboard::NonEmptyPinboard;
 use rayon::prelude::*;
 #[cfg(feature = "local_thread_pool")]
@@ -92,11 +93,11 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
     /// Return a column with index `l`, if one exists.
     /// If found, returns `(col_idx, col)`, where col is a tuple consisting of the corresponding column in R and V.
     /// If not maintaining V, second entry of tuple is `None`.
-    pub fn get_col_with_pivot(&self, l: usize) -> Option<(usize, (C, Option<C>))> {
+    pub fn get_col_with_pivot(&self, l: usize) -> Option<(usize, GuardedRef<(C, Option<C>)>)> {
         loop {
             let piv = self.pivots[l].load();
             if let Some(piv) = piv {
-                let cols = self.matrix[piv].read();
+                let cols = self.matrix[piv].get_ref();
                 if cols.0.pivot() != Some(l) {
                     // Got a column but it now has the wrong pivot; loop again.
                     continue;
@@ -117,7 +118,8 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
     pub fn reduce_column(&self, j: usize) {
         let mut working_j = j;
         'outer: loop {
-            //println!("{:?}", working_j);
+            // We make a copy of the column because we want to mutate our local copy
+            // without locking other threads from reading
             let mut curr_column = self.matrix[working_j].read();
             while let Some(l) = (&curr_column).0.pivot() {
                 let piv_with_column_opt = self.get_col_with_pivot(l);
@@ -128,7 +130,7 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
                         // Only add V columns if we need to
                         if self.options.maintain_v {
                             let curr_v_col = curr_column.1.as_mut().unwrap();
-                            curr_v_col.add_col(&piv_column.1.unwrap());
+                            curr_v_col.add_col(piv_column.1.as_ref().unwrap());
                         }
                     } else if piv > working_j {
                         self.matrix[working_j].set(curr_column);
@@ -165,18 +167,19 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
 
     /// Uses the boundary built up in column `boudary_idx` to clear the column corresponding to its pivot
     pub fn clear_with_column(&self, boudary_idx: usize) {
-        let (boundary_r, _boundary_v) = self.matrix[boudary_idx].read();
+        let boundary = self.matrix[boudary_idx].get_ref();
+        let boundary_r = &boundary.0;
         let clearing_idx = boundary_r
             .pivot()
             .expect("Attempted to clear using cycle column");
-        let clearing_dimension = self.matrix[clearing_idx].read().0.dimension();
+        let clearing_dimension = self.matrix[clearing_idx].get_ref().0.dimension();
         // The cleared R column is empty
         let r_col = C::new_with_dimension(clearing_dimension);
         // The corresponding R column should be the R column of the boundary
         let v_col = self
             .options
             .maintain_v
-            .then_some(boundary_r.with_dimension(clearing_dimension));
+            .then_some(boundary_r.clone().with_dimension(clearing_dimension));
         self.matrix[clearing_idx].set((r_col, v_col));
     }
 
@@ -187,7 +190,7 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
             (0..self.matrix.len())
                 .into_par_iter()
                 .with_min_len(self.options.min_chunk_len)
-                .filter(|&j| self.matrix[j].read().0.dimension() == dimension)
+                .filter(|&j| self.matrix[j].get_ref().0.dimension() == dimension)
                 .for_each(|j| self.reduce_column(j));
         });
     }
@@ -199,8 +202,8 @@ impl<'a, C: Column + 'static> LockFreeAlgorithm<'a, C> {
             (0..self.matrix.len())
                 .into_par_iter()
                 .with_min_len(self.options.min_chunk_len)
-                .filter(|&j| self.matrix[j].read().0.dimension() == dimension)
-                .filter(|&j| self.matrix[j].read().0.is_boundary())
+                .filter(|&j| self.matrix[j].get_ref().0.dimension() == dimension)
+                .filter(|&j| self.matrix[j].get_ref().0.is_boundary())
                 .for_each(|j| self.clear_with_column(j));
         });
     }
@@ -223,7 +226,7 @@ impl<'a, C: Column + 'static> DiagramReadOff for LockFreeAlgorithm<'a, C> {
             .par_iter()
             .enumerate()
             .filter_map(|(idx, col)| {
-                let lowest_idx = col.read().0.pivot()?;
+                let lowest_idx = col.get_ref().0.pivot()?;
                 Some((lowest_idx, idx))
             })
             .collect();
