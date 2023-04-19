@@ -265,7 +265,8 @@ impl<C: Column + 'static> RVDecomposition<C> for LockFreeAlgorithm<C> {
 
     type Options = LoPhatOptions;
 
-    fn decompose(matrix: impl Iterator<Item = C>, options: Self::Options) -> Self {
+    fn decompose(matrix: impl Iterator<Item = C>, options: Option<Self::Options>) -> Self {
+        let options = options.unwrap_or_default();
         let algo = LockFreeAlgorithm::new(matrix, options);
         algo.reduce();
         algo
@@ -285,8 +286,8 @@ mod tests {
         #[test]
         fn lockfree_agrees_with_serial( matrix in sut_matrix(100) ) {
             let options = LoPhatOptions::default();
-            let serial_dgm = SerialAlgorithm::decompose(matrix.iter().cloned(), options).diagram();
-            let parallel_dgm = LockFreeAlgorithm::decompose(matrix.into_iter(), options).diagram();
+            let serial_dgm = SerialAlgorithm::decompose(matrix.iter().cloned(), Some(options)).diagram();
+            let parallel_dgm = LockFreeAlgorithm::decompose(matrix.into_iter(), Some(options)).diagram();
             assert_eq!(serial_dgm, parallel_dgm);
         }
     }

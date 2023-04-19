@@ -6,11 +6,11 @@ use crate::{columns::Column, utils::PersistenceDiagram};
 
 pub trait RVDecomposition<C>
 where
-    C: Column + Sync,
+    C: Column,
 {
-    type Options;
+    type Options: Default;
 
-    fn decompose(matrix: impl Iterator<Item = C>, options: Self::Options) -> Self;
+    fn decompose(matrix: impl Iterator<Item = C>, options: Option<Self::Options>) -> Self;
 
     type RColRef<'a>: Deref<Target = C> + 'a
     where

@@ -77,7 +77,8 @@ impl<C: Column> RVDecomposition<C> for SerialAlgorithm<C> {
 
     type Options = LoPhatOptions;
 
-    fn decompose(matrix: impl Iterator<Item = C>, options: Self::Options) -> Self {
+    fn decompose(matrix: impl Iterator<Item = C>, options: Option<Self::Options>) -> Self {
+        let options = options.unwrap_or_default();
         let algo = SerialAlgorithm::new(options);
         matrix.fold(algo, |mut accum, next_col| {
             accum.reduce_column(next_col);
@@ -123,7 +124,7 @@ mod tests {
             paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
         };
         let options = LoPhatOptions::default();
-        let computed_diagram = SerialAlgorithm::decompose(matrix, options).diagram();
+        let computed_diagram = SerialAlgorithm::decompose(matrix, Some(options)).diagram();
         assert_eq!(computed_diagram, correct_diagram)
     }
 
@@ -136,7 +137,7 @@ mod tests {
             unpaired: HashSet::from_iter(vec![0, 13]),
             paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
         };
-        let decomp = SerialAlgorithm::decompose(matrix, options);
+        let decomp = SerialAlgorithm::decompose(matrix, Some(options));
         let computed_diagram = decomp.diagram();
         for col in decomp.v.unwrap() {
             println!("{:?}", col);
