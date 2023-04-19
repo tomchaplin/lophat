@@ -1,26 +1,4 @@
-use crate::{Column, PersistenceDiagram};
-
-/// Re-indexes a persistence diagram, assuming that it was produced from an anti-transposed matrix.
-/// * `diagram` - the diagram to reindex.
-/// * `matrix_size` - the size of the decomposed matrix, assumed to be square.
-pub fn anti_transpose_diagram(
-    mut diagram: PersistenceDiagram,
-    matrix_size: usize,
-) -> PersistenceDiagram {
-    let new_paired = diagram
-        .paired
-        .into_iter()
-        .map(|(b, d)| (matrix_size - 1 - d, matrix_size - 1 - b))
-        .collect();
-    let new_unpaired = diagram
-        .unpaired
-        .into_iter()
-        .map(|idx| matrix_size - 1 - idx)
-        .collect();
-    diagram.paired = new_paired;
-    diagram.unpaired = new_unpaired;
-    diagram
-}
+use crate::columns::Column;
 
 /// Anti-transposes the input matrix (e.g. to compute cohomology).
 /// * `matrix` - a reference to a collected matrix (vector of columns).
@@ -44,7 +22,7 @@ pub fn anti_transpose<C: Column>(matrix: &Vec<C>) -> Vec<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::column::VecColumn;
+    use crate::columns::VecColumn;
 
     fn build_sphere_triangulation() -> Vec<VecColumn> {
         vec![

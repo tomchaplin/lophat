@@ -1,14 +1,12 @@
+use std::ops::Deref;
 use std::sync::RwLock;
 use std::sync::RwLockReadGuard;
 
-use crate::Column;
-use crate::DiagramReadOff;
-use crate::LoPhatOptions;
-use crate::PersistenceDiagram;
-use crate::RVDecomposition;
+use crate::algorithms::RVDecomposition;
+use crate::columns::Column;
+use crate::options::LoPhatOptions;
 
 use crossbeam::atomic::AtomicCell;
-use hashbrown::HashSet;
 use rayon::prelude::*;
 #[cfg(feature = "local_thread_pool")]
 use rayon::ThreadPoolBuilder;
@@ -45,7 +43,7 @@ pub struct LockingAlgorithm<C: Column + 'static> {
     max_dim: usize,
 }
 
-impl<'a, C: Column + 'static> LockingAlgorithm<C> {
+impl<'a, C: Column> LockingAlgorithm<C> {
     /// Initialise atomic data structure with provided `matrix`, store algorithm options and init thread pool.
     pub fn new(matrix: impl Iterator<Item = C>, options: LoPhatOptions) -> Self {
         let mut max_dim = 0;
@@ -231,71 +229,58 @@ impl<'a, C: Column + 'static> LockingAlgorithm<C> {
     }
 }
 
-impl<C: Column + 'static> DiagramReadOff for LockingAlgorithm<C> {
-    fn diagram(&self) -> crate::PersistenceDiagram {
-        let paired: HashSet<(usize, usize)> = self
-            .matrix
-            .par_iter()
-            .enumerate()
-            .filter_map(|(idx, col)| {
-                let lowest_idx = col.read().unwrap().0.pivot()?;
-                Some((lowest_idx, idx))
-            })
-            .collect();
-        let mut unpaired: HashSet<usize> = (0..self.matrix.len()).collect();
-        for (birth, death) in paired.iter() {
-            unpaired.remove(birth);
-            unpaired.remove(death);
-        }
-        PersistenceDiagram { unpaired, paired }
+pub struct LockingRRef<'a, C>(RwLockReadGuard<'a, (C, Option<C>)>);
+
+impl<'a, C> Deref for LockingRRef<'a, C> {
+    type Target = C;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0.deref().0
     }
 }
 
-impl<C: Column + 'static> From<LockingAlgorithm<C>> for RVDecomposition<C> {
-    fn from(algo: LockingAlgorithm<C>) -> Self {
-        let (r, v) = if algo.options.maintain_v {
-            let (r_sub, v_sub) = algo
-                .matrix
-                .into_iter()
-                .map(|rwlock_cols| rwlock_cols.into_inner().unwrap())
-                .map(|(r_col, v_col)| (r_col, v_col.unwrap()))
-                .unzip();
-            (r_sub, Some(v_sub))
-        } else {
-            (
-                algo.matrix
-                    .into_iter()
-                    .map(|rwlock_cols| rwlock_cols.into_inner().unwrap())
-                    .map(|(r_col, _v_col)| r_col)
-                    .collect(),
-                None,
-            )
-        };
-        RVDecomposition { r, v }
+pub struct LockingVRef<'a, C>(RwLockReadGuard<'a, (C, Option<C>)>);
+
+impl<'a, C> Deref for LockingVRef<'a, C> {
+    type Target = C;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0.deref().1.as_ref().unwrap()
     }
 }
 
-/// Decomposes the input matrix, using the parallel algoirhtm of Morozov and Nigmetov
-/// but storing each column behind a [`RwLock`], to reduce cloning at the expense of locking.
-///
-/// * `matrix` - iterator over columns of the matrix you wish to decompose.
-/// * `options` - additional options to control decompositon, see [`LoPhatOptions`].
-pub fn rv_decompose_locking<C: Column + 'static>(
-    matrix: impl Iterator<Item = C>,
-    options: LoPhatOptions,
-) -> LockingAlgorithm<C> {
-    let algo = LockingAlgorithm::new(matrix, options);
-    algo.reduce();
-    algo
+impl<C: Column + 'static> RVDecomposition<C> for LockingAlgorithm<C> {
+    type RColRef<'a> = LockingRRef<'a, C> where Self : 'a;
+    fn get_r_col<'a>(&'a self, index: usize) -> Self::RColRef<'a> {
+        LockingRRef(self.matrix[index].read().unwrap())
+    }
+
+    type VColRef<'a> = LockingVRef<'a, C> where Self : 'a;
+    fn get_v_col<'a>(&'a self, index: usize) -> Option<Self::VColRef<'a>> {
+        self.options
+            .maintain_v
+            .then_some(LockingVRef(self.matrix[index].read().unwrap()))
+    }
+
+    fn n_cols(&self) -> usize {
+        self.matrix.len()
+    }
+
+    type Options = LoPhatOptions;
+
+    fn decompose(matrix: impl Iterator<Item = C>, options: Self::Options) -> Self {
+        let algo = LockingAlgorithm::new(matrix, options);
+        algo.reduce();
+        algo
+    }
 }
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
-    use crate::column::VecColumn;
-    use crate::rv_decompose_serial;
-    use crate::DiagramReadOff;
+    use crate::algorithms::SerialAlgorithm;
+    use crate::columns::VecColumn;
     use proptest::collection::hash_set;
     use proptest::prelude::*;
 
@@ -303,8 +288,8 @@ mod tests {
         #[test]
         fn locking_agrees_with_serial( matrix in sut_matrix(100) ) {
             let options = LoPhatOptions::default();
-            let serial_dgm = rv_decompose_serial(matrix.iter().cloned(), options).diagram();
-            let parallel_dgm = rv_decompose_locking(matrix.into_iter(), options).diagram();
+            let serial_dgm = SerialAlgorithm::decompose(matrix.iter().cloned(), options).diagram();
+            let parallel_dgm = LockingAlgorithm::decompose(matrix.into_iter(), options).diagram();
             assert_eq!(serial_dgm, parallel_dgm);
         }
     }

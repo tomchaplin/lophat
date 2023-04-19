@@ -1,16 +1,16 @@
-use crate::Column;
-use crate::DiagramReadOff;
-use crate::LoPhatOptions;
-use crate::PersistenceDiagram;
-use crate::RVDecomposition;
+use std::ops::Deref;
+
+use crate::columns::Column;
+use crate::options::LoPhatOptions;
 
 use crossbeam::atomic::AtomicCell;
-use hashbrown::HashSet;
 use pinboard::GuardedRef;
 use pinboard::NonEmptyPinboard;
 use rayon::prelude::*;
 #[cfg(feature = "local_thread_pool")]
 use rayon::ThreadPoolBuilder;
+
+use super::RVDecomposition;
 
 enum LoPhatThreadPool {
     #[cfg(not(feature = "local_thread_pool"))]
@@ -226,70 +226,58 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
     }
 }
 
-impl<'a, C: Column + 'static> DiagramReadOff for LockFreeAlgorithm<C> {
-    fn diagram(&self) -> crate::PersistenceDiagram {
-        let paired: HashSet<(usize, usize)> = self
-            .matrix
-            .par_iter()
-            .enumerate()
-            .filter_map(|(idx, col)| {
-                let lowest_idx = col.get_ref().0.pivot()?;
-                Some((lowest_idx, idx))
-            })
-            .collect();
-        let mut unpaired: HashSet<usize> = (0..self.matrix.len()).collect();
-        for (birth, death) in paired.iter() {
-            unpaired.remove(birth);
-            unpaired.remove(death);
-        }
-        PersistenceDiagram { unpaired, paired }
+pub struct LockFreeRRef<C>(GuardedRef<(C, Option<C>)>);
+
+impl<C> Deref for LockFreeRRef<C> {
+    type Target = C;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0.deref().0
     }
 }
 
-impl<C: Column + 'static> From<LockFreeAlgorithm<C>> for RVDecomposition<C> {
-    fn from(algo: LockFreeAlgorithm<C>) -> Self {
-        let (r, v) = if algo.options.maintain_v {
-            let (r_sub, v_sub) = algo
-                .matrix
-                .into_iter()
-                .map(|pinboard| pinboard.read())
-                .map(|(r_col, v_col)| (r_col, v_col.unwrap()))
-                .unzip();
-            (r_sub, Some(v_sub))
-        } else {
-            (
-                algo.matrix
-                    .into_iter()
-                    .map(|pinboard| pinboard.read())
-                    .map(|(r_col, _v_col)| r_col)
-                    .collect(),
-                None,
-            )
-        };
-        RVDecomposition { r, v }
+pub struct LockFreeVRef<C>(GuardedRef<(C, Option<C>)>);
+
+impl<C> Deref for LockFreeVRef<C> {
+    type Target = C;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0.deref().1.as_ref().unwrap()
     }
 }
 
-/// Decomposes the input matrix, using the lockfree, parallel algoirhtm of Morozov and Nigmetov.
-///
-/// * `matrix` - iterator over columns of the matrix you wish to decompose.
-/// * `options` - additional options to control decompositon, see [`LoPhatOptions`].
-pub fn rv_decompose_lock_free<C: Column + 'static>(
-    matrix: impl Iterator<Item = C>,
-    options: LoPhatOptions,
-) -> LockFreeAlgorithm<C> {
-    let algo = LockFreeAlgorithm::new(matrix, options);
-    algo.reduce();
-    algo
+impl<C: Column + 'static> RVDecomposition<C> for LockFreeAlgorithm<C> {
+    type RColRef<'a> = LockFreeRRef<C>;
+    fn get_r_col<'a>(&'a self, index: usize) -> Self::RColRef<'a> {
+        LockFreeRRef(self.matrix[index].get_ref())
+    }
+
+    type VColRef<'a> = LockFreeVRef<C>;
+    fn get_v_col<'a>(&'a self, index: usize) -> Option<Self::VColRef<'a>> {
+        self.options
+            .maintain_v
+            .then_some(LockFreeVRef(self.matrix[index].get_ref()))
+    }
+
+    fn n_cols(&self) -> usize {
+        self.matrix.len()
+    }
+
+    type Options = LoPhatOptions;
+
+    fn decompose(matrix: impl Iterator<Item = C>, options: Self::Options) -> Self {
+        let algo = LockFreeAlgorithm::new(matrix, options);
+        algo.reduce();
+        algo
+    }
 }
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
-    use crate::column::VecColumn;
-    use crate::rv_decompose_serial;
-    use crate::DiagramReadOff;
+    use crate::algorithms::SerialAlgorithm;
+    use crate::columns::VecColumn;
     use proptest::collection::hash_set;
     use proptest::prelude::*;
 
@@ -297,8 +285,8 @@ mod tests {
         #[test]
         fn lockfree_agrees_with_serial( matrix in sut_matrix(100) ) {
             let options = LoPhatOptions::default();
-            let serial_dgm = rv_decompose_serial(matrix.iter().cloned(), options).diagram();
-            let parallel_dgm = rv_decompose_lock_free(matrix.into_iter(), options).diagram();
+            let serial_dgm = SerialAlgorithm::decompose(matrix.iter().cloned(), options).diagram();
+            let parallel_dgm = LockFreeAlgorithm::decompose(matrix.into_iter(), options).diagram();
             assert_eq!(serial_dgm, parallel_dgm);
         }
     }
