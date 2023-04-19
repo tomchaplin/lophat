@@ -185,7 +185,7 @@ impl<'a, C: Column> LockingAlgorithm<C> {
         let clearing_dimension = self.matrix[clearing_idx].read().unwrap().0.dimension();
         // The cleared R column is empty
         let r_col = C::new_with_dimension(clearing_dimension);
-        // The corresponding R column should be the R column of the boundary
+        // The corresponding V column should be the R column of the boundary
         let v_col = self.options.maintain_v.then(|| {
             let mut br = boundary_r.clone();
             br.set_dimension(clearing_dimension);
