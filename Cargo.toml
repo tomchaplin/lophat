@@ -17,7 +17,6 @@ crate-type = ["lib", "cdylib"]
 [dependencies]
 bit-set = "0.5.3"
 crossbeam = "0.8.2"
-enum_dispatch = "0.3.11"
 hashbrown = { version = "0.13.2", features = ["rayon"] }
 pinboard = "2.2.0"
 pyo3 = { version = "0.18.1", features = ["hashbrown", "extension-module"], optional=true }
