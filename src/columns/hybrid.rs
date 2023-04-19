@@ -68,7 +68,6 @@ impl Column for BitSetVecHybridColumn {
     type EntriesIter<'a> = BitSetVecHybridIter<'a>;
 
     // No idea what's going on here
-    #[allow(implied_bounds_entailment)]
     fn entries<'a>(&'a self) -> Self::EntriesIter<'a> {
         match &self.internal {
             HybridColumnInternal::BitSet(x) => BitSetVecHybridIter::BitSet(x.entries()),
