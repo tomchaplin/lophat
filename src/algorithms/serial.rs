@@ -1,4 +1,4 @@
-use crate::{algorithms::decomposition::RVDecomposition, columns::Column, options::LoPhatOptions};
+use crate::{algorithms::RVDecomposition, columns::Column, options::LoPhatOptions};
 
 use std::collections::HashMap;
 

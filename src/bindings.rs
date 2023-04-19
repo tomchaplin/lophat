@@ -3,7 +3,7 @@ use pyo3::types::PyIterator;
 
 use crate::algorithms::{LockFreeAlgorithm, RVDecomposition};
 use crate::columns::VecColumn;
-use crate::options::aoPhatOptions;
+use crate::options::LoPhatOptions;
 use crate::utils::{anti_transpose, PersistenceDiagram};
 
 fn compute_pairings_anti_transpose(
