@@ -8,7 +8,7 @@ For more information, please see `the repository <https://github.com/tomchaplin/
 
 .. py:function:: compute_pairings(matrix, anti_transpose = True, options= None)
 
-    Decomposes the input matrix, using the lockfree or standard algorithm (according to options).
+    Decomposes the input matrix, using the lockfree algorithm.
 
     :param matrix: The boundary matrix, provided in sparse column format. Each column is a tuple of (dimension, boundary) where boundary is the list of non-zero indices.
     :type matrix: List[Tuple[int, List[int]]] | Iterator[Tuple[int, List[int]]]
@@ -26,7 +26,7 @@ For more information, please see `the repository <https://github.com/tomchaplin/
 
     :param maintain_v: Whether to maintain_v during decompositon, usually best left False.
     :type maintain_v: bool 
-    :param num_threads: Max number of threads to use. Set at 0 to use all threads. Set at 1 to use standard, serial algorithm.
+    :param num_threads: Max number of threads to use. Set at 0 to use all threads.
     :type num_threads: int
     :param column_height: Optional hint to height of columns. If None, assumed that matrix is square.
     :type column_height: int | None
