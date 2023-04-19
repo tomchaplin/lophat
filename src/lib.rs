@@ -60,11 +60,6 @@
 //! assert_eq!(computed_diagram, correct_diagram)
 //! ```
 
-// TODO:
-// 1. Use set_mode in algorithms
-// 2. Change options struct for each algorithm
-// 3. Decide on Python bindings
-
 pub mod algorithms;
 pub mod columns;
 pub mod options;

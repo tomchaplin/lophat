@@ -47,6 +47,7 @@ impl Column for BitSetVecHybridColumn {
 
     fn add_col(&mut self, other: &Self) {
         // We do this because it is assumes you are adding a Vec into a BitSet
+        // therefore no way to optimise over consuming the iterator
         self.add_entries(other.entries())
     }
 

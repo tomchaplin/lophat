@@ -1,4 +1,8 @@
-use crate::{algorithms::RVDecomposition, columns::Column, options::LoPhatOptions};
+use crate::{
+    algorithms::RVDecomposition,
+    columns::{Column, ColumnMode},
+    options::LoPhatOptions,
+};
 
 use std::collections::HashMap;
 
@@ -26,12 +30,14 @@ impl<C: Column> SerialAlgorithm<C> {
     }
     /// Uses the decomposition so far to reduce the next column of D with left-to-right columns addition.
     pub fn reduce_column(&mut self, mut column: C) {
+        column.set_mode(ColumnMode::Working);
         // v_col tracks how the final reduced column is built up
         // Currently column contains 1 lot of the latest column in D
         let maintain_v = self.v.is_some();
         let mut v_col: Option<C> = None;
         if maintain_v {
             let mut v_col_internal = C::new_with_dimension(column.dimension());
+            v_col_internal.set_mode(ColumnMode::Working);
             v_col_internal.add_entry(self.r.len());
             v_col = Some(v_col_internal);
         }
@@ -52,9 +58,12 @@ impl<C: Column> SerialAlgorithm<C> {
             self.low_inverse.insert(final_pivot, self.r.len());
         }
         // Push to decomposition
+        column.set_mode(ColumnMode::Storage);
         self.r.push(column);
         if maintain_v {
-            self.v.as_mut().unwrap().push(v_col.unwrap());
+            let mut v_col = v_col.unwrap();
+            v_col.set_mode(ColumnMode::Storage);
+            self.v.as_mut().unwrap().push(v_col);
         }
     }
 }

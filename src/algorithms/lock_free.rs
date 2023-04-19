@@ -1,7 +1,9 @@
 use std::ops::Deref;
 
 use crate::columns::Column;
+use crate::columns::ColumnMode::{Storage, Working};
 use crate::options::LoPhatOptions;
+use crate::utils::set_mode_of_pair;
 
 use crossbeam::atomic::AtomicCell;
 use pinboard::GuardedRef;
@@ -127,6 +129,7 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
         'outer: loop {
             // We make a copy of the column because we want to mutate our local copy
             let mut curr_column = self.matrix[working_j].read();
+            set_mode_of_pair(&mut curr_column, Working);
             while let Some(l) = (&curr_column).0.pivot() {
                 let piv_with_column_opt = self.get_col_with_pivot(l);
                 if let Some((piv, piv_column)) = piv_with_column_opt {
@@ -139,7 +142,7 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
                             curr_v_col.add_col(piv_column.1.as_ref().unwrap());
                         }
                     } else if piv > working_j {
-                        self.matrix[working_j].set(curr_column);
+                        self.write_to_matrix(working_j, curr_column);
                         if self.pivots[l]
                             .compare_exchange(Some(piv), Some(working_j))
                             .is_ok()
@@ -152,7 +155,7 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
                     }
                 } else {
                     // piv = -1 case
-                    self.matrix[working_j].set(curr_column);
+                    self.write_to_matrix(working_j, curr_column);
                     if self.pivots[l]
                         .compare_exchange(None, Some(working_j))
                         .is_ok()
@@ -165,10 +168,15 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
             }
             // Lines 25-27 (curr_column = 0 clause)
             if (&curr_column.0).is_cycle() {
-                self.matrix[working_j].set(curr_column);
+                self.write_to_matrix(working_j, curr_column);
                 return;
             }
         }
+    }
+
+    fn write_to_matrix(&self, index: usize, mut to_write: (C, Option<C>)) {
+        set_mode_of_pair(&mut to_write, Storage);
+        self.matrix[index].set(to_write);
     }
 
     /// Uses the boundary built up in column `boudary_idx` to clear the column corresponding to its pivot
@@ -187,7 +195,7 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
             br.set_dimension(clearing_dimension);
             br
         });
-        self.matrix[clearing_idx].set((r_col, v_col));
+        self.write_to_matrix(clearing_idx, (r_col, v_col));
     }
 
     /// Reduce all columns of given dimension in parallel, according to `options`.
@@ -278,7 +286,7 @@ mod tests {
 
     use super::*;
     use crate::algorithms::SerialAlgorithm;
-    use crate::columns::VecColumn;
+    use crate::columns::{BitSetColumn, BitSetVecHybridColumn, VecColumn};
     use proptest::collection::hash_set;
     use proptest::prelude::*;
 
@@ -289,6 +297,36 @@ mod tests {
             let serial_dgm = SerialAlgorithm::decompose(matrix.iter().cloned(), Some(options)).diagram();
             let parallel_dgm = LockFreeAlgorithm::decompose(matrix.into_iter(), Some(options)).diagram();
             assert_eq!(serial_dgm, parallel_dgm);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn hybrid_cols_work( matrix in sut_matrix(100) ) {
+            let hybrid_matrix = matrix.iter().map(|col| {
+                let mut hybrid_col = BitSetVecHybridColumn::new_with_dimension(col.dimension());
+                hybrid_col.add_entries(col.entries());
+                hybrid_col
+            });
+            let options = LoPhatOptions::default();
+            let hybrid_dgm = LockFreeAlgorithm::decompose(hybrid_matrix, Some(options)).diagram();
+            let vec_dgm = LockFreeAlgorithm::decompose(matrix.into_iter(), Some(options)).diagram();
+            assert_eq!(vec_dgm, hybrid_dgm);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn bit_set_cols_work( matrix in sut_matrix(100) ) {
+            let bit_set_matrix = matrix.iter().map(|col| {
+                let mut bit_set_col = BitSetColumn::new_with_dimension(col.dimension());
+                bit_set_col.add_entries(col.entries());
+                bit_set_col
+            });
+            let options = LoPhatOptions::default();
+            let bit_set_dgm = LockFreeAlgorithm::decompose(bit_set_matrix, Some(options)).diagram();
+            let vec_dgm = LockFreeAlgorithm::decompose(matrix.into_iter(), Some(options)).diagram();
+            assert_eq!(vec_dgm, bit_set_dgm);
         }
     }
 

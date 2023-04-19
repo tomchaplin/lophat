@@ -4,7 +4,9 @@ use std::sync::RwLockReadGuard;
 
 use crate::algorithms::RVDecomposition;
 use crate::columns::Column;
+use crate::columns::ColumnMode::{Storage, Working};
 use crate::options::LoPhatOptions;
+use crate::utils::set_mode_of_pair;
 
 use crossbeam::atomic::AtomicCell;
 use rayon::prelude::*;
@@ -124,6 +126,7 @@ impl<'a, C: Column> LockingAlgorithm<C> {
             // We make a copy of the column because we want to mutate our local copy
             // without locking other threads from reading
             let mut curr_column = self.matrix[working_j].read().unwrap().clone();
+            set_mode_of_pair(&mut curr_column, Working);
             while let Some(l) = (&curr_column).0.pivot() {
                 let piv_with_column_opt = self.get_col_with_pivot(l);
                 if let Some((piv, piv_column)) = piv_with_column_opt {
@@ -170,7 +173,8 @@ impl<'a, C: Column> LockingAlgorithm<C> {
 
     // Write to matrix; might lock until no read locks present
     // Make sure write lock is dropped quickly
-    fn write_to_matrix(&self, index: usize, to_write: (C, Option<C>)) {
+    fn write_to_matrix(&self, index: usize, mut to_write: (C, Option<C>)) {
+        set_mode_of_pair(&mut to_write, Storage);
         let mut in_matrix = self.matrix[index].write().unwrap();
         *in_matrix = to_write;
     }
