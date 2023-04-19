@@ -25,6 +25,7 @@ As such, you should expect LoPHAT to under-perform as compared to [giotto-ph [3]
 The only changes from the algorithm described in [[1]](#1) are:
 * We use the `pinboard` library for epoch-based memory management of the matrices.
 * We store the $j^{th}$ column of $R$ and $V$ alongside each other in memory, allowing a full $R=DV$ decomposition (rather than just computing pairings).
+* We additionally employ the clearing optimisation [[5]](#5) and provide methods for anti-transpotion (so as to compute persistent cohomology).
 * We distribute chunks via work-stealing, using the `rayon` library.
 
 > **Warning**
@@ -63,12 +64,8 @@ For example usage, see the file `example.py` or [this Google colab notebook](htt
 - [ ] Write unit tests
 - [ ] Write integration tests (testing V) 
 - [ ] Benchmark
-- [ ] Add alternative column representations
-- [ ] Implement a `LoPhatOptionsBuilder` in Rust and Python
 - [ ] Abstract out matrix trait
 - [ ] Reduce memory usage when V not maintained
-- [ ] Add example Rust usage
-- [ ] Add support for returning generators (needs different logic depending on whether homology or cohomology was computed).
 
 ## References
 
@@ -89,3 +86,9 @@ arXiv preprint [arXiv:2107.05412](https://arxiv.org/abs/2107.05412) (2021).
 Oineus v1.0. Computer software.
 [https://www.osti.gov//servlets/purl/1774764](https://www.osti.gov//servlets/purl/1774764). USDOE. 1 Apr. 2021.
 Web. [doi:10.11578/dc.20210407.1](https://doi.org/10.11578/dc.20210407.1). [GitHub](https://github.com/anigmetov/oineus)
+
+<a id="5">[5]</a> Bauer, Ulrich, Michael Kerber, and Jan Reininghaus.
+"Clear and compress: Computing persistent homology in chunks."
+Topological Methods in Data Analysis and Visualization III: Theory, Algorithms, and Applications.
+Springer International Publishing, 2014.
+
