@@ -2,9 +2,11 @@
 
 mod anti_transpose;
 mod diagram;
+mod file_format;
 
 pub use anti_transpose::anti_transpose;
 pub use diagram::PersistenceDiagram;
+pub use file_format::{ConvertToFileFormat, RVDFileFormat};
 
 use crate::columns::{Column, ColumnMode};
 

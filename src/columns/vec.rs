@@ -1,11 +1,13 @@
 use std::cmp::Ordering;
 
+use serde::{Deserialize, Serialize};
+
 use super::{Column, ColumnMode};
 
 /// A column represented by an increasing vector of the non-zero indices.
 ///
 /// To construct call [`VecColumn::from`] or use [`VecColumn::new_with_dimension`] and [`VecColumn::add_entries`]
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VecColumn {
     boundary: Vec<usize>,
     dimension: usize,
