@@ -1,7 +1,8 @@
 use std::cmp::Ordering;
 
 use super::{Column, ColumnMode};
-/// A [`Column`]-implementing struct, representing the column by an increasing vector of the non-zero indices.
+
+/// A column represented by an increasing vector of the non-zero indices.
 ///
 /// To construct call [`VecColumn::from`] or use [`VecColumn::new_with_dimension`] and [`VecColumn::add_entries`]
 #[derive(Debug, Default, Clone, PartialEq)]

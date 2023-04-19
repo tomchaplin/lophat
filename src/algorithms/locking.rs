@@ -33,8 +33,9 @@ impl LoPhatThreadPool {
     }
 }
 
-/// Stores the matrix and pivot vector behind appropriate atomic data types, as well as the algorithm options.
-/// Provides methods for reducing the matrix in parallel.
+/// Implements a locking version of the parallel, lockfree algorithm introduced by [Morozov and Nigmetov](https://doi.org/10.1145/3350755.3400244).
+/// Rather than using atomic pointers to store columns, each column is stored behind a [`RwLock`](std::sync::RwLock).
+/// Also able to employ the clearing optimisation of [Bauer et al.](https://doi.org/10.1007/978-3-319-04099-8_7).
 pub struct LockingAlgorithm<C: Column + 'static> {
     matrix: Vec<RwLock<(C, Option<C>)>>,
     pivots: Vec<AtomicCell<Option<usize>>>,
@@ -45,7 +46,7 @@ pub struct LockingAlgorithm<C: Column + 'static> {
 
 impl<'a, C: Column> LockingAlgorithm<C> {
     /// Initialise atomic data structure with provided `matrix`, store algorithm options and init thread pool.
-    pub fn new(matrix: impl Iterator<Item = C>, options: LoPhatOptions) -> Self {
+    fn new(matrix: impl Iterator<Item = C>, options: LoPhatOptions) -> Self {
         let mut max_dim = 0;
         let matrix: Vec<_> = matrix
             .enumerate()

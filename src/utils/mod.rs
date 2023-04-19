@@ -1,3 +1,5 @@
+//! Utility functions and structs, including persistence diagrams and matrix anti-transposition.
+
 mod anti_transpose;
 mod diagram;
 

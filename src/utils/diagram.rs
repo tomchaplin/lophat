@@ -8,14 +8,15 @@ use pyo3::prelude::*;
 #[cfg_attr(feature = "python", pyclass(get_all, set_all))]
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct PersistenceDiagram {
+    /// The set of unpaired columns indexes.
     pub unpaired: HashSet<usize>,
+    /// The set of column pairings.
     pub paired: HashSet<(usize, usize)>,
 }
 
 impl PersistenceDiagram {
     /// Re-indexes a persistence diagram, assuming that it was produced from an anti-transposed matrix.
-    /// * `diagram` - the diagram to reindex.
-    /// * `matrix_size` - the size of the decomposed matrix, assumed to be square.
+    /// Requires `matrix_size` - the size of the decomposed matrix, assumed to be square.
     pub fn anti_transpose(mut self, matrix_size: usize) -> Self {
         let new_paired = self
             .paired

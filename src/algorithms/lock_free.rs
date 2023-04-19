@@ -34,8 +34,8 @@ impl LoPhatThreadPool {
     }
 }
 
-/// Stores the matrix and pivot vector behind appropriate atomic data types, as well as the algorithm options.
-/// Provides methods for reducing the matrix in parallel.
+/// Implements the parallel, lockfree algorithm introduced by [Morozov and Nigmetov](https://doi.org/10.1145/3350755.3400244).
+/// Also able to employ the clearing optimisation of [Bauer et al.](https://doi.org/10.1007/978-3-319-04099-8_7).
 pub struct LockFreeAlgorithm<C: Column + 'static> {
     matrix: Vec<NonEmptyPinboard<(C, Option<C>)>>,
     pivots: Vec<AtomicCell<Option<usize>>>,
@@ -46,7 +46,7 @@ pub struct LockFreeAlgorithm<C: Column + 'static> {
 
 impl<C: Column + 'static> LockFreeAlgorithm<C> {
     /// Initialise atomic data structure with provided `matrix`, store algorithm options and init thread pool.
-    pub fn new(matrix: impl Iterator<Item = C>, options: LoPhatOptions) -> Self {
+    fn new(matrix: impl Iterator<Item = C>, options: LoPhatOptions) -> Self {
         Self::warn_if_not_lockfree();
         let mut max_dim = 0;
         let matrix: Vec<_> = matrix

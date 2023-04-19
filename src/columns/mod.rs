@@ -1,3 +1,5 @@
+//! Representations of columns of a Z_2 matrix, complying to a common interface.
+
 mod bit_set;
 mod hybrid;
 mod vec;
@@ -6,8 +8,11 @@ pub use self::bit_set::BitSetColumn;
 pub use hybrid::BitSetVecHybridColumn;
 pub use vec::VecColumn;
 
+/// Enum representing the differnt modes that the column is in, which may impact the optimal representation.
 pub enum ColumnMode {
+    /// A column in this mode is about to be mutated regularly, e.g. through [`add_col`](Column::add_col).
     Working,
+    /// A column in this mode will not be mutated much but may be regularly read from.
     Storage,
 }
 
@@ -42,7 +47,9 @@ pub trait Column: Sync + Clone + Send + From<(usize, Self::EntriesRepr)> {
     /// Change column to provided dimension
     fn set_dimension(&mut self, dimension: usize);
 
-    fn set_mode(&mut self, _mode: ColumnMode);
+    /// Change the underlying representation of the column to optimise it for the corresponding `mode`.
+    /// Only relevant for certain representations.
+    fn set_mode(&mut self, mode: ColumnMode);
 
     /// Returns whether or not the column is a cycle, i.e. has no entries.
     /// Provided implementation makes call to [`Self::pivot`].

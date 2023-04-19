@@ -28,6 +28,10 @@ impl Default for HybridColumnInternal {
     }
 }
 
+/// A hybrid column which changes representation depending on the current [`ColumnMode`].
+///
+/// * During [`ColumnMode::Working`], the representation is as a [`BitSetColumn`].
+/// * During [`ColumnMode::Storage`], the representation is as a [`VecColumn`].
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct BitSetVecHybridColumn {
     internal: HybridColumnInternal,

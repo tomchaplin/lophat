@@ -2,8 +2,9 @@ use crate::{algorithms::RVDecomposition, columns::Column, options::LoPhatOptions
 
 use std::collections::HashMap;
 
-/// Stores the matrices R and V resulting from and R=DV decomposition as vectors of structs implementing [`Column`].
-#[derive(Debug, Default)]
+/// Implements the standard left-to-right column additional algorithm of [Edelsbrunner et al.](https://doi.org/10.1109/SFCS.2000.892133).
+/// No optimisations have been implemented.
+#[derive(Debug)]
 pub struct SerialAlgorithm<C: Column> {
     r: Vec<C>,
     v: Option<Vec<C>>,
@@ -11,7 +12,7 @@ pub struct SerialAlgorithm<C: Column> {
 }
 
 impl<C: Column> SerialAlgorithm<C> {
-    pub fn new(options: LoPhatOptions) -> Self {
+    fn new(options: LoPhatOptions) -> Self {
         Self {
             r: vec![],
             v: options.maintain_v.then_some(vec![]),

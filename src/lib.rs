@@ -61,18 +61,13 @@
 //! ```
 
 // TODO:
-// 1. Document everyting
-// 2. Use set_mode in columns
-// 3. Change options struct for each algorithm
-// 4. Decide on Python bindings
+// 1. Use set_mode in algorithms
+// 2. Change options struct for each algorithm
+// 3. Decide on Python bindings
 
-/// Structs implementing various algorithms for computing persistent homology.
 pub mod algorithms;
-/// Structs representing columns of a Z_2 matrix, complying to a common interface.
 pub mod columns;
-/// To be deprecated.
 pub mod options;
-/// Utility functions and structs, including persistence diagrams and matrix anti-transposition.
 pub mod utils;
 
 #[cfg(feature = "python")]

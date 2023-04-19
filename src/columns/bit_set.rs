@@ -1,7 +1,7 @@
 use bit_set::BitSet;
 
 use super::{Column, ColumnMode};
-/// A [`Column`]-implementing struct, representing the column by a bit set of the non-zero indices.
+/// A column represented by a bit vector (with a set-like interface) of the non-zero indices.
 ///
 /// To construct call [`BitSetColumn::from`] or use [`BitSetColumn::new_with_dimension`] and [`BitSetColumn::add_entries`]
 #[derive(Debug, Default, Clone, PartialEq)]
