@@ -1,5 +1,8 @@
 use std::ops::Deref;
 
+#[cfg(feature = "serde")]
+use crate::impl_rvd_serialize;
+
 use crate::columns::Column;
 use crate::columns::ColumnMode::{Storage, Working};
 use crate::options::LoPhatOptions;
@@ -93,11 +96,7 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
         }
     }
 
-    fn warn_if_not_lockfree() {
-        if !AtomicCell::<Option<usize>>::is_lock_free() {
-            eprintln!("WARNING: The pivot vector is locking");
-        }
-    }
+    fn warn_if_not_lockfree() {}
 
     /// Return a column with index `l`, if one exists.
     /// If found, returns `(col_idx, col)`, where col is a tuple consisting of the corresponding column in R and V.
@@ -352,3 +351,6 @@ mod tests {
         })
     }
 }
+
+#[cfg(feature = "serde")]
+impl_rvd_serialize!(LockFreeAlgorithm);

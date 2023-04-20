@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 use super::{Column, ColumnMode};
@@ -7,7 +8,8 @@ use super::{Column, ColumnMode};
 /// A column represented by an increasing vector of the non-zero indices.
 ///
 /// To construct call [`VecColumn::from`] or use [`VecColumn::new_with_dimension`] and [`VecColumn::add_entries`]
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct VecColumn {
     boundary: Vec<usize>,
     dimension: usize,

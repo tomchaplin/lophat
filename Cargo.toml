@@ -16,18 +16,19 @@ crate-type = ["lib", "cdylib"]
 
 [dependencies]
 bit-set = "0.5.3"
-ciborium = "0.2.0"
 crossbeam = "0.8.2"
 hashbrown = { version = "0.13.2", features = ["rayon"] }
 pinboard = "2.2.0"
 pyo3 = { version = "0.18.1", features = ["hashbrown", "extension-module"], optional=true }
 rayon = "1.7.0"
-serde = { version = "1.0.160", features = ["derive"] }
+serde = { version = "1.0.160", features = ["derive"], optional=true }
 
 [features]
-default = ["python", "local_thread_pool"]
+default = ["python", "local_thread_pool", "serde"]
 python = ["dep:pyo3"]
 local_thread_pool = []
+serde = ["dep:serde"]
 
 [dev-dependencies]
+ciborium = "0.2.0"
 proptest = "1.1.0"
