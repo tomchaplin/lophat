@@ -9,7 +9,7 @@
 project = "LoPHAT"
 copyright = "2023, Thomas Chaplin"
 author = "Thomas Chaplin"
-release = "0.9.0"
+release = "0.9.1"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

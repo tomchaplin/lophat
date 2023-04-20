@@ -1,3 +1,6 @@
+#[cfg(feature = "serde")]
+use crate::impl_rvd_serialize;
+
 use crate::{
     algorithms::RVDecomposition,
     columns::{Column, ColumnMode},
@@ -155,3 +158,6 @@ mod tests {
         assert_eq!(computed_diagram, correct_diagram)
     }
 }
+
+#[cfg(feature = "serde")]
+impl_rvd_serialize!(SerialAlgorithm);

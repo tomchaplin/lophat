@@ -1,3 +1,6 @@
+#[cfg(feature = "serde")]
+use crate::impl_rvd_serialize;
+
 use std::ops::Deref;
 use std::sync::RwLock;
 use std::sync::RwLockReadGuard;
@@ -322,3 +325,6 @@ mod tests {
         })
     }
 }
+
+#[cfg(feature = "serde")]
+impl_rvd_serialize!(LockingAlgorithm);

@@ -2,9 +2,14 @@
 
 mod anti_transpose;
 mod diagram;
+#[cfg(feature = "serde")]
+mod file_format;
 
 pub use anti_transpose::anti_transpose;
 pub use diagram::PersistenceDiagram;
+
+#[cfg(feature = "serde")]
+pub use file_format::{clone_to_file_format, clone_to_veccolumn, serialize_algo, RVDFileFormat};
 
 use crate::columns::{Column, ColumnMode};
 
