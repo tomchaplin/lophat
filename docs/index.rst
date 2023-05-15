@@ -30,7 +30,7 @@ For more information, please see `the repository <https://github.com/tomchaplin/
     :param options: Options to control the R=DV decomposition algorithm.
     :type options: LoPhatOptions
     :returns: The persistence pairings read off from the R=DV decomposition.
-    :rtype: PersistenceDiagram
+    :rtype: PersistenceDiagramWithReps
 
 .. py:class:: LoPhatOptions(maintain_v = False,num_threads= 0,column_height= None,max_chunk_len= 1, clearing = True)
 
