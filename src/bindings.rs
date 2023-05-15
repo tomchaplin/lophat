@@ -2,6 +2,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyIterator;
 
 use crate::algorithms::{LockFreeAlgorithm, RVDecomposition};
+use crate::columns::Column;
 use crate::columns::VecColumn;
 use crate::options::LoPhatOptions;
 use crate::utils::{anti_transpose, PersistenceDiagram};
@@ -54,6 +55,68 @@ fn compute_pairings_non_transpose(
     }
 }
 
+#[pyclass(get_all, set_all)]
+struct PersistenceDiagramWithReps {
+    paired: Vec<(usize, usize)>,
+    unpaired: Vec<usize>,
+    paired_reps: Vec<Vec<usize>>,
+    unpaired_reps: Vec<Vec<usize>>,
+}
+
+#[pyfunction]
+fn compute_pairings_with_reps(
+    py: Python<'_>,
+    matrix: &PyAny,
+    options: Option<LoPhatOptions>,
+) -> PersistenceDiagramWithReps {
+    // Overwrite maintain_v in options
+    let mut options = options.unwrap_or(LoPhatOptions::default());
+    options.maintain_v = true;
+    let options = Some(options);
+    // Run R=DV decomposition
+    let decomposition = if let Ok(matrix_as_vec) = matrix.extract::<Vec<(usize, Vec<usize>)>>() {
+        let matrix_as_rs_iter = matrix_as_vec.into_iter().map(VecColumn::from);
+        LockFreeAlgorithm::decompose(matrix_as_rs_iter, options)
+    } else if let Ok(py_iter) = PyIterator::from_object(py, matrix) {
+        let matrix_as_rs_iter = py_iter.map(|col| {
+            col.and_then(PyAny::extract::<(usize, Vec<usize>)>)
+                .map(VecColumn::from)
+                .expect("Column is a list of unsigned integers")
+        });
+        LockFreeAlgorithm::decompose(matrix_as_rs_iter, options)
+    } else {
+        panic!("Could not coerce input matrix into List[List[int]] | Iterator[List[int]]");
+    };
+    // Read off diagram and pull out representatives
+    let mut diagram = decomposition.diagram();
+    let (paired, paired_reps): (Vec<_>, Vec<Vec<_>>) = diagram
+        .paired
+        .drain()
+        .map(|pairing| {
+            (
+                pairing,
+                decomposition.get_r_col(pairing.1).entries().collect(),
+            )
+        })
+        .unzip();
+    let (unpaired, unpaired_reps): (Vec<_>, Vec<Vec<_>>) = diagram
+        .unpaired
+        .drain()
+        .map(|birth| {
+            (
+                birth,
+                decomposition.get_v_col(birth).unwrap().entries().collect(),
+            )
+        })
+        .unzip();
+    PersistenceDiagramWithReps {
+        paired,
+        unpaired,
+        paired_reps,
+        unpaired_reps,
+    }
+}
+
 #[pyfunction]
 #[pyo3(signature = (matrix,anti_transpose= true, options=None))]
 fn compute_pairings(
@@ -73,6 +136,7 @@ fn compute_pairings(
 #[pymodule]
 fn lophat(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_pairings, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_pairings_with_reps, m)?)?;
     m.add_class::<LoPhatOptions>()?;
     Ok(())
 }
