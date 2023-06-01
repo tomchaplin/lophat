@@ -68,6 +68,9 @@ For example usage, see the file `example.py` or [this Google colab notebook](htt
 - [ ] Benchmark
 - [ ] Abstract out matrix trait?
 - [ ] Reduce memory usage when V not maintained
+- [ ] Add contributing guide
+- [ ] Fix locking in pivots vector
+- [ ] Github actions
 
 ## References
 
