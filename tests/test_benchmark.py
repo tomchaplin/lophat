@@ -16,9 +16,9 @@ def rips_bdry_matrix(pts):
     s_tree2 = simplex_tree.copy()
     for idx, f_val in enumerate(simplex_tree.get_filtration()):
         s_tree2.assign_filtration(f_val[0], idx)
+
     # Build up matrix to pass to phimaker
-    matrix = []
-    for idx, f_val in enumerate(s_tree2.get_filtration()):
+    def compute_annotated_col(idx, f_val):
         smplx = f_val[0]
         sparse_bdry = [int(face_idx) for _, face_idx in s_tree2.get_boundaries(smplx)]
         if len(sparse_bdry) == 0:
@@ -26,8 +26,12 @@ def rips_bdry_matrix(pts):
         else:
             dimension = len(sparse_bdry) - 1
         annotated_col = (dimension, sorted(sparse_bdry))
-        matrix.append(annotated_col)
-    return matrix
+        return annotated_col
+
+    return (
+        compute_annotated_col(idx, f_val)
+        for idx, f_val in enumerate(s_tree2.get_filtration())
+    )
 
 
 def torus_boundary_matrix():
@@ -35,17 +39,32 @@ def torus_boundary_matrix():
     return pts
 
 
+np.random.seed(42)
+pts = torus_boundary_matrix()
+matrix = list(rips_bdry_matrix(pts))
+
+
 @pytest.fixture(params=n_threads_range)
 def n_threads(request):
     return request.param
 
 
-def test_torus(benchmark, n_threads):
-    np.random.seed(42)
-    pts = torus_boundary_matrix()
-    matrix = rips_bdry_matrix(pts)
+def func_to_bench(col_iter, n_threads):
     options = LoPhatOptions(num_threads=n_threads)
+    compute_pairings(col_iter, options=options)
 
-    @benchmark
-    def func_to_bench():
-        compute_pairings(matrix, options=options)
+
+def test_torus_iter(benchmark, n_threads):
+    def setup():
+        col_iter = (col for col in matrix)
+        return (col_iter, n_threads), {}
+
+    benchmark.pedantic(func_to_bench, setup=setup)
+
+
+def test_torus_vec(benchmark, n_threads):
+    def setup():
+        col_iter = [col for col in matrix]
+        return (col_iter, n_threads), {}
+
+    benchmark.pedantic(func_to_bench, setup=setup)
