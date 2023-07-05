@@ -5,7 +5,7 @@ use crate::columns::Column;
 /// Assumes that input matrix is square.
 pub fn anti_transpose<C: Column>(matrix: &Vec<C>) -> Vec<C> {
     let matrix_width = matrix.len();
-    let max_dim = matrix.iter().map(|col| col.dimension()).max().unwrap();
+    let max_dim = matrix.iter().map(|col| col.dimension()).max().unwrap_or(0);
     let mut return_matrix: Vec<_> = matrix
         .iter()
         .rev()
