@@ -1,4 +1,6 @@
 use std::ops::Deref;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::{Relaxed, Release};
 
 #[cfg(feature = "serde")]
 use crate::impl_rvd_serialize;
@@ -8,7 +10,6 @@ use crate::columns::ColumnMode::{Storage, Working};
 use crate::options::LoPhatOptions;
 use crate::utils::set_mode_of_pair;
 
-use crossbeam::atomic::AtomicCell;
 use pinboard::GuardedRef;
 use pinboard::NonEmptyPinboard;
 use rayon::prelude::*;
@@ -43,7 +44,8 @@ impl LoPhatThreadPool {
 /// Also able to employ the clearing optimisation of [Bauer et al.](https://doi.org/10.1007/978-3-319-04099-8_7).
 pub struct LockFreeAlgorithm<C: Column + 'static> {
     matrix: Vec<NonEmptyPinboard<(C, Option<C>)>>,
-    pivots: Vec<AtomicCell<Option<usize>>>,
+    // NOTE: We use `usize::MAX` as a sentinel value, meaning no pivot.
+    pivots: Vec<AtomicUsize>,
     options: LoPhatOptions,
     thread_pool: LoPhatThreadPool,
     max_dim: usize,
@@ -52,7 +54,6 @@ pub struct LockFreeAlgorithm<C: Column + 'static> {
 impl<C: Column + 'static> LockFreeAlgorithm<C> {
     /// Initialise atomic data structure with provided `matrix`, store algorithm options and init thread pool.
     fn new(matrix: impl Iterator<Item = C>, options: LoPhatOptions) -> Self {
-        Self::warn_if_not_lockfree();
         let mut max_dim = 0;
         let matrix: Vec<_> = matrix
             .enumerate()
@@ -68,7 +69,9 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
             })
             .collect();
         let column_height = options.column_height.unwrap_or(matrix.len());
-        let pivots: Vec<_> = (0..column_height).map(|_| AtomicCell::new(None)).collect();
+        let pivots: Vec<_> = (0..column_height)
+            .map(|_| AtomicUsize::new(usize::MAX))
+            .collect();
         // Setup thread pool
         #[cfg(feature = "local_thread_pool")]
         let thread_pool = LoPhatThreadPool::Local(
@@ -96,14 +99,33 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
         }
     }
 
-    fn warn_if_not_lockfree() {}
+    // Returns the value in position [idx] of the pivots array
+    // Maps to Option<usize> to cover the case that no column yet has that pivot
+    fn get_pivot(&self, idx: usize) -> Option<usize> {
+        let piv = self
+            .pivots
+            .get(idx)
+            .expect("Should ask for column index within range")
+            .load(Relaxed);
+        usize_to_option_usize(piv)
+    }
+
+    // Attempts to compare_exchange_week position [idx] of the pivots array
+    // Returns whether or not the operation succeeded
+    fn cew_pivot_succeeds(&self, idx: usize, current: Option<usize>, new: Option<usize>) -> bool {
+        let current = option_usize_to_usize(current);
+        let new = option_usize_to_usize(new);
+        self.pivots[idx]
+            .compare_exchange_weak(current, new, Release, Relaxed)
+            .is_ok()
+    }
 
     /// Return a column with index `l`, if one exists.
     /// If found, returns `(col_idx, col)`, where col is a tuple consisting of the corresponding column in R and V.
     /// If not maintaining V, second entry of tuple is `None`.
     pub fn get_col_with_pivot(&self, l: usize) -> Option<(usize, GuardedRef<(C, Option<C>)>)> {
         loop {
-            let piv = self.pivots[l].load();
+            let piv = self.get_pivot(l);
             if let Some(piv) = piv {
                 let cols = self.matrix[piv].get_ref();
                 if cols.0.pivot() != Some(l) {
@@ -142,10 +164,7 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
                         }
                     } else if piv > working_j {
                         self.write_to_matrix(working_j, curr_column);
-                        if self.pivots[l]
-                            .compare_exchange(Some(piv), Some(working_j))
-                            .is_ok()
-                        {
+                        if self.cew_pivot_succeeds(l, Some(piv), Some(working_j)) {
                             working_j = piv;
                         }
                         continue 'outer;
@@ -155,10 +174,7 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
                 } else {
                     // piv = -1 case
                     self.write_to_matrix(working_j, curr_column);
-                    if self.pivots[l]
-                        .compare_exchange(None, Some(working_j))
-                        .is_ok()
-                    {
+                    if self.cew_pivot_succeeds(l, None, Some(working_j)) {
                         return;
                     } else {
                         continue 'outer;
@@ -349,6 +365,18 @@ mod tests {
             col.sort();
             VecColumn::from((0, col))
         })
+    }
+}
+
+fn option_usize_to_usize(opt: Option<usize>) -> usize {
+    opt.unwrap_or(usize::MAX)
+}
+
+fn usize_to_option_usize(val: usize) -> Option<usize> {
+    if val == usize::MAX {
+        None
+    } else {
+        Some(val)
     }
 }
 
