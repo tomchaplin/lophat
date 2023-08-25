@@ -11,7 +11,6 @@ use crate::columns::ColumnMode::{Storage, Working};
 use crate::options::LoPhatOptions;
 use crate::utils::set_mode_of_pair;
 
-use crossbeam::atomic::AtomicCell;
 use rayon::prelude::*;
 #[cfg(feature = "local_thread_pool")]
 use rayon::ThreadPoolBuilder;
@@ -46,7 +45,7 @@ impl LoPhatThreadPool {
 /// Also able to employ the clearing optimisation of [Bauer et al.](https://doi.org/10.1007/978-3-319-04099-8_7).
 pub struct LockingAlgorithm<C: Column + 'static> {
     matrix: Vec<RwLock<(C, Option<C>)>>,
-    pivots: Vec<AtomicCell<Option<usize>>>,
+    pivots: Vec<RwLock<Option<usize>>>,
     options: LoPhatOptions,
     thread_pool: LoPhatThreadPool,
     max_dim: usize,
@@ -61,7 +60,7 @@ impl<'a, C: Column> LockingAlgorithm<C> {
         l: usize,
     ) -> Option<(usize, RwLockReadGuard<'a, (C, Option<C>)>)> {
         loop {
-            let piv = self.pivots[l].load();
+            let piv = *self.pivots[l].read().unwrap();
             if let Some(piv) = piv {
                 let cols = self.matrix[piv].read().unwrap();
                 if cols.0.pivot() != Some(l) {
@@ -101,11 +100,10 @@ impl<'a, C: Column> LockingAlgorithm<C> {
                         }
                     } else if piv > working_j {
                         self.write_to_matrix(working_j, curr_column);
-                        if self.pivots[l]
-                            .compare_exchange(Some(piv), Some(working_j))
-                            .is_ok()
-                        {
-                            working_j = piv;
+                        let mut pivot_lock = self.pivots[l].write().unwrap();
+                        if *pivot_lock == Some(piv) {
+                            *pivot_lock = Some(working_j);
+                            working_j = piv
                         }
                         continue 'outer;
                     } else {
@@ -114,10 +112,9 @@ impl<'a, C: Column> LockingAlgorithm<C> {
                 } else {
                     // piv = -1 case
                     self.write_to_matrix(working_j, curr_column);
-                    if self.pivots[l]
-                        .compare_exchange(None, Some(working_j))
-                        .is_ok()
-                    {
+                    let mut pivot_lock = self.pivots[l].write().unwrap();
+                    if *pivot_lock == None {
+                        *pivot_lock = Some(working_j);
                         return;
                     } else {
                         continue 'outer;
@@ -260,7 +257,7 @@ impl<C: Column> DecompositionAlgo<C> for LockingAlgorithm<C> {
     fn decompose(mut self) -> Self::Decomposition {
         // Setup pivots vector
         let column_height = self.options.column_height.unwrap_or(self.matrix.len());
-        self.pivots = (0..column_height).map(|_| AtomicCell::new(None)).collect();
+        self.pivots = (0..column_height).map(|_| RwLock::new(None)).collect();
         // Decompose
         for dimension in (0..=self.max_dim).rev() {
             self.reduce_dimension(dimension);
