@@ -329,7 +329,8 @@ mod tests {
     proptest! {
         #[test]
         fn lockfree_agrees_with_serial( matrix in sut_matrix(100) ) {
-            let options = LoPhatOptions::default();
+            let mut options = LoPhatOptions::default();
+            options.clearing = false;
             let serial_dgm = SerialAlgorithm::init(Some(options)).add_cols(matrix.iter().cloned()).decompose().diagram();
             let parallel_dgm = LockFreeAlgorithm::init(Some(options)).add_cols(matrix.into_iter()).decompose().diagram();
             assert_eq!(serial_dgm, parallel_dgm);
@@ -344,7 +345,8 @@ mod tests {
                 hybrid_col.add_entries(col.entries());
                 hybrid_col
             });
-            let options = LoPhatOptions::default();
+            let mut options = LoPhatOptions::default();
+            options.clearing = false;
             let hybrid_dgm = LockFreeAlgorithm::init( Some(options)).add_cols(hybrid_matrix).decompose().diagram();
             let vec_dgm = LockFreeAlgorithm::init( Some(options)).add_cols(matrix.into_iter()).decompose().diagram();
             assert_eq!(vec_dgm, hybrid_dgm);
@@ -359,7 +361,8 @@ mod tests {
                 bit_set_col.add_entries(col.entries());
                 bit_set_col
             });
-            let options = LoPhatOptions::default();
+            let mut options = LoPhatOptions::default();
+            options.clearing = false;
             let bit_set_dgm = LockFreeAlgorithm::init(Some(options)).add_cols(bit_set_matrix).decompose().diagram();
             let vec_dgm = LockFreeAlgorithm::init(Some(options)).add_cols(matrix.into_iter()).decompose().diagram();
             assert_eq!(vec_dgm, bit_set_dgm);
