@@ -3,29 +3,29 @@ use std::{cell::Cell, ops::Deref};
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
 
 use crate::{
-    algorithms::RVDecomposition,
+    algorithms::{Decomposition, NoVMatrixError},
     columns::{Column, VecColumn},
 };
 
 #[macro_export]
 /// Implements [`Serialize`](serde::Serialize) on the provided algorithm, for any column representation.
 ///
-/// The struct must be generic over the column type and implement [`RVDecomposition`](crate::algorithms::RVDecomposition).
+/// The struct must be generic over the column type and implement [`Decomposition`](crate::algorithms::Decomposition).
 /// As a fallback, you may wish to use [`serialize_algo`] to implement [`Serialize`](serde::Serialize) yourself.
 ///
 /// **Note:** We intentionally *do not* implement [`Deserialize`](serde::Deserialize).
-/// Instead, you should deserialize to [`RVDFileFormat`].
+/// Instead, you should deserialize to [`DecompositionFileFormat`].
 ///
 /// # Example usage
 ///
 /// ```ignore
 /// use lophat::impl_rvd_serialize;
 /// use lophat::columns::Column;
-/// use lophat::algorithms::RVDecomposition;
+/// use lophat::algorithms::Decomposition;
 ///
 /// struct MyAlgo<C: Column> { ... }
 ///
-/// impl<C:Column> RVDecomposition<C> for MyAlgo<C> { ... }
+/// impl<C:Column> Decomposition<C> for MyAlgo<C> { ... }
 ///
 /// impl_rvd_serialize!(MyAlgo);
 /// ````
@@ -48,67 +48,52 @@ macro_rules! impl_rvd_serialize {
 /// The struct can be serialized and deserialized, and hence written to file.
 ///
 /// Internally, R and V are stored as a vector of [`VecColumn`].
-/// Usually, this is constructed via serializing another [`RVDecomposition`] (e.g. using [`impl_rvd_serialize`]) and then deserializing
-/// into a [`RVDFileFormat`].
+/// Usually, this is constructed via serializing another [`Decomposition`] (e.g. using [`impl_rvd_serialize`]) and then deserializing
+/// into a [`DecompositionFileFormat`].
 ///
 /// # Example
 /// ```
 /// use lophat::{
-///     algorithms::{LockFreeAlgorithm, RVDecomposition},
+///     algorithms::{LockFreeAlgorithm, DecompositionAlgo},
 ///     columns::VecColumn,
-///     utils::RVDFileFormat
+///     utils::DecompositionFileFormat
 /// };
 /// // Use CBOR file format to store serialization
 /// use ciborium::{de::from_reader, ser::into_writer};
 ///
-/// fn get_matrix() -> impl Iterator<Item = VecColumn> {
-///     vec![
-///         (0, vec![]),
-///         (0, vec![]),
-///         (0, vec![]),
-///         (1, vec![0, 1]),
-///         (1, vec![0, 2]),
-///         (1, vec![1, 2]),
-///         (2, vec![3, 4, 5]),
-///     ]
-///     .into_iter()
-///     .map(VecColumn::from)
-/// }
+/// let matrix = vec![
+///     (0, vec![]),
+///     (0, vec![]),
+///     (0, vec![]),
+///     (1, vec![0, 1]),
+///     (1, vec![0, 2]),
+///     (1, vec![1, 2]),
+///     (2, vec![3, 4, 5]),
+/// ]
+/// .into_iter()
+/// .map(VecColumn::from);
 ///
-/// let matrix = get_matrix();
-/// let decomp = LockFreeAlgorithm::decompose(matrix, None);
+/// let decomp = LockFreeAlgorithm::init(None).add_cols(matrix).decompose();
 /// // Serialize into bytes (could write to file here instead)
 /// let mut bytes: Vec<u8> = vec![];
 /// into_writer(&decomp, &mut bytes).ok();
 /// // Deseralize to file format
-/// let rvdff: RVDFileFormat = from_reader(bytes.as_slice()).ok().unwrap();
+/// let rvdff: DecompositionFileFormat = from_reader(bytes.as_slice()).ok().unwrap();
 /// ```
 #[derive(Deserialize, PartialEq, Debug)]
-pub struct RVDFileFormat {
+pub struct DecompositionFileFormat {
     r: Vec<VecColumn>,
     v: Option<Vec<VecColumn>>,
 }
 
-impl RVDFileFormat {
-    /// Construct the [`RVDFileFormat`] using the provided matrices.
+impl DecompositionFileFormat {
+    /// Construct the [`DecompositionFileFormat`] using the provided matrices.
     pub fn new(r: Vec<VecColumn>, v: Option<Vec<VecColumn>>) -> Self {
         Self { r, v }
     }
 }
 
-impl RVDecomposition<VecColumn> for RVDFileFormat {
-    type Options = ();
-
-    /// **WARNING:** This method will *always* panic.
-    /// Instead, please construct via [`RVDFileFormat::new`], [`clone_to_file_format`] or
-    /// deserialization from some other [`RVDecomposition`] (see [`impl_rvd_serialize`]).
-    fn decompose(
-        _matrix: impl Iterator<Item = VecColumn>,
-        _options: Option<Self::Options>,
-    ) -> Self {
-        panic!("This is a file format and should not be used to decompose!")
-    }
-
+impl Decomposition<VecColumn> for DecompositionFileFormat {
     type RColRef<'a> = &'a VecColumn
     where
         Self: 'a;
@@ -121,8 +106,8 @@ impl RVDecomposition<VecColumn> for RVDFileFormat {
     where
         Self: 'a;
 
-    fn get_v_col<'a>(&'a self, index: usize) -> Option<Self::VColRef<'a>> {
-        Some(&self.v.as_ref()?[index])
+    fn get_v_col<'a>(&'a self, index: usize) -> Result<Self::VColRef<'a>, NoVMatrixError> {
+        Ok(&self.v.as_ref().ok_or(NoVMatrixError)?[index])
     }
 
     fn n_cols(&self) -> usize {
@@ -138,12 +123,12 @@ pub fn clone_to_veccolumn<C: Column>(col: &C) -> VecColumn {
     output
 }
 
-/// After serializing your decomposition, you should deserialize to [`RVDFileFormat`].
+/// After serializing your decomposition, you should deserialize to [`DecompositionFileFormat`].
 pub fn serialize_algo<C, Algo, S>(algo: &Algo, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
     C: Column,
-    Algo: RVDecomposition<C>,
+    Algo: Decomposition<C>,
 {
     // Taken from https://users.rust-lang.org/t/how-to-serialize-an-iterator-to-json/59272
     // We wrap the iterator in a cell so that we can implement Serialize on it
@@ -170,7 +155,7 @@ where
     }
 
     // Set up struct
-    let mut rvdff = serializer.serialize_struct("RVDFileFormat", 2)?;
+    let mut rvdff = serializer.serialize_struct("DecompositionFileFormat", 2)?;
 
     // Serialize R
     let r_col_iter = (0..algo.n_cols()).map(|idx| {
@@ -181,7 +166,7 @@ where
     rvdff.serialize_field("r", &r_col_iter)?;
 
     // Serialize V
-    let has_v = algo.get_v_col(0).is_some();
+    let has_v = algo.get_v_col(0).is_ok();
     let v_col_iter_opt = if has_v {
         let v_col_iter = (0..algo.n_cols()).map(|idx| {
             // Can safely unwrap everything because V was maintained
@@ -197,7 +182,7 @@ where
 }
 
 // We do not derive directly because we want all algorithms to use the same serialize function.
-impl Serialize for RVDFileFormat {
+impl Serialize for DecompositionFileFormat {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -206,19 +191,21 @@ impl Serialize for RVDFileFormat {
     }
 }
 
-/// Converts the provided algorithm output to [`RVDFileFormat`], making a copy in memory.
+/// Converts the provided algorithm output to [`DecompositionFileFormat`], making a copy in memory.
 ///
 /// Typically, it is more useful to directly serialize `algo`, e.g. using the [`impl_rvd_serialize`] macro.
 /// This avoids making an extra copy of `algo` in memory, before writing to file.
-/// The resulting serialization can then be deserialized into a [`RVDFileFormat`].
-pub fn clone_to_file_format<C: Column, Algo: RVDecomposition<C>>(algo: &Algo) -> RVDFileFormat {
+/// The resulting serialization can then be deserialized into a [`DecompositionFileFormat`].
+pub fn clone_to_file_format<C: Column, Algo: Decomposition<C>>(
+    algo: &Algo,
+) -> DecompositionFileFormat {
     let r = (0..algo.n_cols())
         .map(|idx| {
             let col = algo.get_r_col(idx);
             clone_to_veccolumn(col.deref())
         })
         .collect();
-    let v = algo.get_v_col(0).and_then(|_| {
+    let v = algo.get_v_col(0).ok().and_then(|_| {
         Some(
             (0..algo.n_cols())
                 .map(|idx| {
@@ -228,19 +215,19 @@ pub fn clone_to_file_format<C: Column, Algo: RVDecomposition<C>>(algo: &Algo) ->
                 .collect(),
         )
     });
-    RVDFileFormat::new(r, v)
+    DecompositionFileFormat::new(r, v)
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        algorithms::{LockFreeAlgorithm, RVDecomposition},
+        algorithms::{DecompositionAlgo, LockFreeAlgorithm},
         columns::VecColumn,
         options::LoPhatOptions,
     };
     use ciborium::{de::from_reader, ser::into_writer};
 
-    use super::RVDFileFormat;
+    use super::DecompositionFileFormat;
 
     fn get_matrix() -> impl Iterator<Item = VecColumn> {
         vec![
@@ -256,7 +243,7 @@ mod tests {
         .map(VecColumn::from)
     }
 
-    fn get_rvdff(with_g: bool) -> RVDFileFormat {
+    fn get_rvdff(with_g: bool) -> DecompositionFileFormat {
         let correct_r = vec![
             (0, vec![]),
             (0, vec![]),
@@ -280,9 +267,9 @@ mod tests {
         .into_iter()
         .map(VecColumn::from);
         if with_g {
-            RVDFileFormat::new(correct_r.collect(), Some(correct_v.collect()))
+            DecompositionFileFormat::new(correct_r.collect(), Some(correct_v.collect()))
         } else {
-            RVDFileFormat::new(correct_r.collect(), None)
+            DecompositionFileFormat::new(correct_r.collect(), None)
         }
     }
 
@@ -292,13 +279,13 @@ mod tests {
         let rvdff_1 = get_rvdff(true);
         let mut bytes: Vec<u8> = vec![];
         into_writer(&rvdff_1, &mut bytes).ok();
-        let rvdff_2: RVDFileFormat = from_reader(bytes.as_slice()).ok().unwrap();
+        let rvdff_2: DecompositionFileFormat = from_reader(bytes.as_slice()).ok().unwrap();
         assert_eq!(rvdff_1, rvdff_2);
         // Serialize and back again without V
         let rvdff_1 = get_rvdff(false);
         let mut bytes: Vec<u8> = vec![];
         into_writer(&rvdff_1, &mut bytes).ok();
-        let rvdff_2: RVDFileFormat = from_reader(bytes.as_slice()).ok().unwrap();
+        let rvdff_2: DecompositionFileFormat = from_reader(bytes.as_slice()).ok().unwrap();
         assert_eq!(rvdff_1, rvdff_2);
     }
 
@@ -311,12 +298,14 @@ mod tests {
         options.maintain_v = true;
         options.clearing = false; // Just do normal left-to-right reduction in decreasing dimensions
         options.num_threads = 1; // So we can predict the output
-        let decomp = LockFreeAlgorithm::decompose(matrix, Some(options));
+        let decomp = LockFreeAlgorithm::init(Some(options))
+            .add_cols(matrix)
+            .decompose();
         // Serialize into bytes
         let mut bytes: Vec<u8> = vec![];
         into_writer(&decomp, &mut bytes).ok();
         // Deseralize to file format
-        let rvdff: RVDFileFormat = from_reader(bytes.as_slice()).ok().unwrap();
+        let rvdff: DecompositionFileFormat = from_reader(bytes.as_slice()).ok().unwrap();
         // Check all columns are correct
         assert_eq!(rvdff, correct_rvdff)
     }
@@ -329,12 +318,14 @@ mod tests {
         options.maintain_v = false;
         options.clearing = false; // Just do normal left-to-right reduction in decreasing dimensions
         options.num_threads = 1; // So we can predict the output
-        let decomp = LockFreeAlgorithm::decompose(matrix, Some(options));
+        let decomp = LockFreeAlgorithm::init(Some(options))
+            .add_cols(matrix)
+            .decompose();
         // Serialize into bytes
         let mut bytes: Vec<u8> = vec![];
         into_writer(&decomp, &mut bytes).ok();
         // Deseralize to file format
-        let rvdff: RVDFileFormat = from_reader(bytes.as_slice()).ok().unwrap();
+        let rvdff: DecompositionFileFormat = from_reader(bytes.as_slice()).ok().unwrap();
         // Check all columns are correct and V is none
         assert_eq!(rvdff, correct_rvdff)
     }

@@ -16,7 +16,7 @@ use rayon::prelude::*;
 #[cfg(feature = "local_thread_pool")]
 use rayon::ThreadPoolBuilder;
 
-use super::RVDecomposition;
+use super::{Decomposition, DecompositionAlgo, NoVMatrixError};
 
 enum LoPhatThreadPool {
     #[cfg(not(feature = "local_thread_pool"))]
@@ -52,53 +52,6 @@ pub struct LockFreeAlgorithm<C: Column + 'static> {
 }
 
 impl<C: Column + 'static> LockFreeAlgorithm<C> {
-    /// Initialise atomic data structure with provided `matrix`, store algorithm options and init thread pool.
-    fn new(matrix: impl Iterator<Item = C>, options: LoPhatOptions) -> Self {
-        let mut max_dim = 0;
-        let matrix: Vec<_> = matrix
-            .enumerate()
-            .map(|(idx, r_col)| {
-                max_dim = max_dim.max(r_col.dimension());
-                if options.maintain_v {
-                    let mut v_col = C::new_with_dimension(r_col.dimension());
-                    v_col.add_entry(idx);
-                    NonEmptyPinboard::new((r_col, Some(v_col)))
-                } else {
-                    NonEmptyPinboard::new((r_col, None))
-                }
-            })
-            .collect();
-        let column_height = options.column_height.unwrap_or(matrix.len());
-        let pivots: Vec<_> = (0..column_height)
-            .map(|_| AtomicUsize::new(usize::MAX))
-            .collect();
-        // Setup thread pool
-        #[cfg(feature = "local_thread_pool")]
-        let thread_pool = LoPhatThreadPool::Local(
-            ThreadPoolBuilder::new()
-                .num_threads(options.num_threads)
-                .build()
-                .expect("Failed to build thread pool"),
-        );
-        #[cfg(not(feature = "local_thread_pool"))]
-        let thread_pool = {
-            if options.num_threads != 0 {
-                panic!(
-                    "To specify a number of threads, please enable the local_thread_pool feature"
-                );
-            }
-            LoPhatThreadPool::Global()
-        };
-        // Return options
-        Self {
-            matrix,
-            pivots,
-            options,
-            thread_pool,
-            max_dim,
-        }
-    }
-
     // Returns the value in position [idx] of the pivots array
     // Maps to Option<usize> to cover the case that no column yet has that pivot
     fn get_pivot(&self, idx: usize) -> Option<usize> {
@@ -237,17 +190,89 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
                 .for_each(|j| self.clear_with_column(j));
         });
     }
+}
 
-    /// Reduce all columns in parallel, according to `options`.
-    pub fn reduce(&self) {
+impl<C: Column> DecompositionAlgo<C> for LockFreeAlgorithm<C> {
+    type Options = LoPhatOptions;
+
+    fn init(options: Option<Self::Options>) -> Self {
+        let options = options.unwrap_or_default();
+        // Setup thread pool
+        #[cfg(feature = "local_thread_pool")]
+        let thread_pool = LoPhatThreadPool::Local(
+            ThreadPoolBuilder::new()
+                .num_threads(options.num_threads)
+                .build()
+                .expect("Failed to build thread pool"),
+        );
+        #[cfg(not(feature = "local_thread_pool"))]
+        let thread_pool = {
+            if options.num_threads != 0 {
+                panic!(
+                    "To specify a number of threads, please enable the local_thread_pool feature"
+                );
+            }
+            LoPhatThreadPool::Global()
+        };
+        Self {
+            matrix: vec![],
+            pivots: vec![],
+            options,
+            thread_pool,
+            max_dim: 0,
+        }
+    }
+
+    fn add_cols(mut self, cols: impl Iterator<Item = C>) -> Self {
+        let first_idx = self.matrix.len();
+        let new_cols = cols.enumerate().map(|(idx, r_col)| {
+            self.max_dim = self.max_dim.max(r_col.dimension());
+            if self.options.maintain_v {
+                let mut v_col = C::new_with_dimension(r_col.dimension());
+                v_col.add_entry(first_idx + idx);
+                NonEmptyPinboard::new((r_col, Some(v_col)))
+            } else {
+                NonEmptyPinboard::new((r_col, None))
+            }
+        });
+        self.matrix.extend(new_cols);
+        self
+    }
+
+    fn add_entries(self, entries: impl Iterator<Item = (usize, usize)>) -> Self {
+        for (row, col) in entries {
+            let col = self
+                .matrix
+                .get(col)
+                .expect("Column index should correspond to a pre-existing column");
+            let mut col_clone = col.get_ref().clone();
+            col_clone.0.add_entry(row);
+            col.set(col_clone);
+        }
+        self
+    }
+
+    type Decomposition = LockFreeDecomposition<C>;
+
+    fn decompose(mut self) -> Self::Decomposition {
+        // Setup pivots vector
+        let column_height = self.options.column_height.unwrap_or(self.matrix.len());
+        self.pivots = (0..column_height)
+            .map(|_| AtomicUsize::new(usize::MAX))
+            .collect();
+        // Decompose
         for dimension in (0..=self.max_dim).rev() {
             self.reduce_dimension(dimension);
             if self.options.clearing && dimension > 0 {
                 self.clear_dimension(dimension)
             }
         }
+        LockFreeDecomposition(self.matrix)
     }
 }
+
+/// Return type of [`LockFreeAlgorithm`].
+pub struct LockFreeDecomposition<C: Column + 'static>(Vec<NonEmptyPinboard<(C, Option<C>)>>);
 
 pub struct LockFreeRRef<C>(GuardedRef<(C, Option<C>)>);
 
@@ -269,30 +294,25 @@ impl<C> Deref for LockFreeVRef<C> {
     }
 }
 
-impl<C: Column + 'static> RVDecomposition<C> for LockFreeAlgorithm<C> {
+impl<C: Column + 'static> Decomposition<C> for LockFreeDecomposition<C> {
     type RColRef<'a> = LockFreeRRef<C>;
     fn get_r_col<'a>(&'a self, index: usize) -> Self::RColRef<'a> {
-        LockFreeRRef(self.matrix[index].get_ref())
+        LockFreeRRef(self.0[index].get_ref())
     }
 
     type VColRef<'a> = LockFreeVRef<C>;
-    fn get_v_col<'a>(&'a self, index: usize) -> Option<Self::VColRef<'a>> {
-        self.options
-            .maintain_v
-            .then_some(LockFreeVRef(self.matrix[index].get_ref()))
+    fn get_v_col<'a>(&'a self, index: usize) -> Result<Self::VColRef<'a>, NoVMatrixError> {
+        let col_ref = self.0[index].get_ref();
+        let has_v = col_ref.1.is_some();
+        if has_v {
+            Ok(LockFreeVRef(col_ref))
+        } else {
+            Err(NoVMatrixError)
+        }
     }
 
     fn n_cols(&self) -> usize {
-        self.matrix.len()
-    }
-
-    type Options = LoPhatOptions;
-
-    fn decompose(matrix: impl Iterator<Item = C>, options: Option<Self::Options>) -> Self {
-        let options = options.unwrap_or_default();
-        let algo = LockFreeAlgorithm::new(matrix, options);
-        algo.reduce();
-        algo
+        self.0.len()
     }
 }
 
@@ -300,6 +320,7 @@ impl<C: Column + 'static> RVDecomposition<C> for LockFreeAlgorithm<C> {
 mod tests {
 
     use super::*;
+    use crate::algorithms::Decomposition;
     use crate::algorithms::SerialAlgorithm;
     use crate::columns::{BitSetColumn, BitSetVecHybridColumn, VecColumn};
     use proptest::collection::hash_set;
@@ -309,8 +330,8 @@ mod tests {
         #[test]
         fn lockfree_agrees_with_serial( matrix in sut_matrix(100) ) {
             let options = LoPhatOptions::default();
-            let serial_dgm = SerialAlgorithm::decompose(matrix.iter().cloned(), Some(options)).diagram();
-            let parallel_dgm = LockFreeAlgorithm::decompose(matrix.into_iter(), Some(options)).diagram();
+            let serial_dgm = SerialAlgorithm::init(Some(options)).add_cols(matrix.iter().cloned()).decompose().diagram();
+            let parallel_dgm = LockFreeAlgorithm::init(Some(options)).add_cols(matrix.into_iter()).decompose().diagram();
             assert_eq!(serial_dgm, parallel_dgm);
         }
     }
@@ -324,8 +345,8 @@ mod tests {
                 hybrid_col
             });
             let options = LoPhatOptions::default();
-            let hybrid_dgm = LockFreeAlgorithm::decompose(hybrid_matrix, Some(options)).diagram();
-            let vec_dgm = LockFreeAlgorithm::decompose(matrix.into_iter(), Some(options)).diagram();
+            let hybrid_dgm = LockFreeAlgorithm::init( Some(options)).add_cols(hybrid_matrix).decompose().diagram();
+            let vec_dgm = LockFreeAlgorithm::init( Some(options)).add_cols(matrix.into_iter()).decompose().diagram();
             assert_eq!(vec_dgm, hybrid_dgm);
         }
     }
@@ -339,8 +360,8 @@ mod tests {
                 bit_set_col
             });
             let options = LoPhatOptions::default();
-            let bit_set_dgm = LockFreeAlgorithm::decompose(bit_set_matrix, Some(options)).diagram();
-            let vec_dgm = LockFreeAlgorithm::decompose(matrix.into_iter(), Some(options)).diagram();
+            let bit_set_dgm = LockFreeAlgorithm::init(Some(options)).add_cols(bit_set_matrix).decompose().diagram();
+            let vec_dgm = LockFreeAlgorithm::init(Some(options)).add_cols(matrix.into_iter()).decompose().diagram();
             assert_eq!(vec_dgm, bit_set_dgm);
         }
     }
@@ -381,4 +402,4 @@ fn usize_to_option_usize(val: usize) -> Option<usize> {
 }
 
 #[cfg(feature = "serde")]
-impl_rvd_serialize!(LockFreeAlgorithm);
+impl_rvd_serialize!(LockFreeDecomposition);

@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyIterator;
 
-use crate::algorithms::{LockFreeAlgorithm, RVDecomposition};
+use crate::algorithms::{Decomposition, DecompositionAlgo, LockFreeAlgorithm};
 use crate::columns::Column;
 use crate::columns::VecColumn;
 use crate::options::LoPhatOptions;
@@ -30,7 +30,10 @@ fn compute_pairings_anti_transpose(
     let at: Vec<_> = anti_transpose(&matrix_as_vec);
     let dgm = {
         let matrix = at.into_iter();
-        LockFreeAlgorithm::decompose(matrix, options).diagram()
+        LockFreeAlgorithm::init(options)
+            .add_cols(matrix)
+            .decompose()
+            .diagram()
     };
     dgm.anti_transpose(width)
 }
@@ -42,14 +45,20 @@ fn compute_pairings_non_transpose(
 ) -> PersistenceDiagram {
     if let Ok(matrix_as_vec) = matrix.extract::<Vec<(usize, Vec<usize>)>>() {
         let matrix_as_rs_iter = matrix_as_vec.into_iter().map(VecColumn::from);
-        LockFreeAlgorithm::decompose(matrix_as_rs_iter, options).diagram()
+        LockFreeAlgorithm::init(options)
+            .add_cols(matrix_as_rs_iter)
+            .decompose()
+            .diagram()
     } else if let Ok(py_iter) = PyIterator::from_object(py, matrix) {
         let matrix_as_rs_iter = py_iter.map(|col| {
             col.and_then(PyAny::extract::<(usize, Vec<usize>)>)
                 .map(VecColumn::from)
                 .expect("Column is a list of unsigned integers")
         });
-        LockFreeAlgorithm::decompose(matrix_as_rs_iter, options).diagram()
+        LockFreeAlgorithm::init(options)
+            .add_cols(matrix_as_rs_iter)
+            .decompose()
+            .diagram()
     } else {
         panic!("Could not coerce input matrix into List[List[int]] | Iterator[List[int]]");
     }
@@ -76,14 +85,18 @@ fn compute_pairings_with_reps(
     // Run R=DV decomposition
     let decomposition = if let Ok(matrix_as_vec) = matrix.extract::<Vec<(usize, Vec<usize>)>>() {
         let matrix_as_rs_iter = matrix_as_vec.into_iter().map(VecColumn::from);
-        LockFreeAlgorithm::decompose(matrix_as_rs_iter, options)
+        LockFreeAlgorithm::init(options)
+            .add_cols(matrix_as_rs_iter)
+            .decompose()
     } else if let Ok(py_iter) = PyIterator::from_object(py, matrix) {
         let matrix_as_rs_iter = py_iter.map(|col| {
             col.and_then(PyAny::extract::<(usize, Vec<usize>)>)
                 .map(VecColumn::from)
                 .expect("Column is a list of unsigned integers")
         });
-        LockFreeAlgorithm::decompose(matrix_as_rs_iter, options)
+        LockFreeAlgorithm::init(options)
+            .add_cols(matrix_as_rs_iter)
+            .decompose()
     } else {
         panic!("Could not coerce input matrix into List[List[int]] | Iterator[List[int]]");
     };

@@ -5,7 +5,7 @@ use std::ops::Deref;
 use std::sync::RwLock;
 use std::sync::RwLockReadGuard;
 
-use crate::algorithms::RVDecomposition;
+use crate::algorithms::Decomposition;
 use crate::columns::Column;
 use crate::columns::ColumnMode::{Storage, Working};
 use crate::options::LoPhatOptions;
@@ -15,6 +15,9 @@ use crossbeam::atomic::AtomicCell;
 use rayon::prelude::*;
 #[cfg(feature = "local_thread_pool")]
 use rayon::ThreadPoolBuilder;
+
+use super::DecompositionAlgo;
+use super::NoVMatrixError;
 
 enum LoPhatThreadPool {
     #[cfg(not(feature = "local_thread_pool"))]
@@ -50,51 +53,6 @@ pub struct LockingAlgorithm<C: Column + 'static> {
 }
 
 impl<'a, C: Column> LockingAlgorithm<C> {
-    /// Initialise atomic data structure with provided `matrix`, store algorithm options and init thread pool.
-    fn new(matrix: impl Iterator<Item = C>, options: LoPhatOptions) -> Self {
-        let mut max_dim = 0;
-        let matrix: Vec<_> = matrix
-            .enumerate()
-            .map(|(idx, r_col)| {
-                max_dim = max_dim.max(r_col.dimension());
-                if options.maintain_v {
-                    let mut v_col = C::new_with_dimension(r_col.dimension());
-                    v_col.add_entry(idx);
-                    RwLock::new((r_col, Some(v_col)))
-                } else {
-                    RwLock::new((r_col, None))
-                }
-            })
-            .collect();
-        let column_height = options.column_height.unwrap_or(matrix.len());
-        let pivots: Vec<_> = (0..column_height).map(|_| AtomicCell::new(None)).collect();
-        // Setup thread pool
-        #[cfg(feature = "local_thread_pool")]
-        let thread_pool = LoPhatThreadPool::Local(
-            ThreadPoolBuilder::new()
-                .num_threads(options.num_threads)
-                .build()
-                .expect("Failed to build thread pool"),
-        );
-        #[cfg(not(feature = "local_thread_pool"))]
-        let thread_pool = {
-            if options.num_threads != 0 {
-                panic!(
-                    "To specify a number of threads, please enable the local_thread_pool feature"
-                );
-            }
-            LoPhatThreadPool::Global()
-        };
-        // Return options
-        Self {
-            matrix,
-            pivots,
-            options,
-            thread_pool,
-            max_dim,
-        }
-    }
-
     /// Return a column with index `l`, if one exists.
     /// If found, returns `(col_idx, col)`, where col is a tuple consisting of the corresponding column in R and V.
     /// If not maintaining V, second entry of tuple is `None`.
@@ -237,6 +195,86 @@ impl<'a, C: Column> LockingAlgorithm<C> {
     }
 }
 
+impl<C: Column> DecompositionAlgo<C> for LockingAlgorithm<C> {
+    type Options = LoPhatOptions;
+
+    fn init(options: Option<Self::Options>) -> Self {
+        let options = options.unwrap_or_default();
+        // Setup thread pool
+        #[cfg(feature = "local_thread_pool")]
+        let thread_pool = LoPhatThreadPool::Local(
+            ThreadPoolBuilder::new()
+                .num_threads(options.num_threads)
+                .build()
+                .expect("Failed to build thread pool"),
+        );
+        #[cfg(not(feature = "local_thread_pool"))]
+        let thread_pool = {
+            if options.num_threads != 0 {
+                panic!(
+                    "To specify a number of threads, please enable the local_thread_pool feature"
+                );
+            }
+            LoPhatThreadPool::Global()
+        };
+        Self {
+            matrix: vec![],
+            pivots: vec![],
+            options,
+            thread_pool,
+            max_dim: 0,
+        }
+    }
+
+    fn add_cols(mut self, cols: impl Iterator<Item = C>) -> Self {
+        let first_idx = self.matrix.len();
+        let new_cols = cols.enumerate().map(|(idx, r_col)| {
+            self.max_dim = self.max_dim.max(r_col.dimension());
+            if self.options.maintain_v {
+                let mut v_col = C::new_with_dimension(r_col.dimension());
+                v_col.add_entry(first_idx + idx);
+                RwLock::new((r_col, Some(v_col)))
+            } else {
+                RwLock::new((r_col, None))
+            }
+        });
+        self.matrix.extend(new_cols);
+        self
+    }
+
+    fn add_entries(self, entries: impl Iterator<Item = (usize, usize)>) -> Self {
+        for (row, col) in entries {
+            let mut col = self
+                .matrix
+                .get(col)
+                .expect("Column index should correspond to a pre-existing column")
+                .write()
+                .expect("Can eventually get write guard on column");
+            col.0.add_entry(row);
+        }
+        self
+    }
+
+    type Decomposition = LockingDecomposition<C>;
+
+    fn decompose(mut self) -> Self::Decomposition {
+        // Setup pivots vector
+        let column_height = self.options.column_height.unwrap_or(self.matrix.len());
+        self.pivots = (0..column_height).map(|_| AtomicCell::new(None)).collect();
+        // Decompose
+        for dimension in (0..=self.max_dim).rev() {
+            self.reduce_dimension(dimension);
+            if self.options.clearing && dimension > 0 {
+                self.clear_dimension(dimension)
+            }
+        }
+        LockingDecomposition(self.matrix)
+    }
+}
+
+/// Return type of [`LockingAlgorithm`].
+pub struct LockingDecomposition<C: Column + 'static>(Vec<RwLock<(C, Option<C>)>>);
+
 pub struct LockingRRef<'a, C>(RwLockReadGuard<'a, (C, Option<C>)>);
 
 impl<'a, C> Deref for LockingRRef<'a, C> {
@@ -257,30 +295,25 @@ impl<'a, C> Deref for LockingVRef<'a, C> {
     }
 }
 
-impl<C: Column + 'static> RVDecomposition<C> for LockingAlgorithm<C> {
+impl<C: Column + 'static> Decomposition<C> for LockingDecomposition<C> {
     type RColRef<'a> = LockingRRef<'a, C> where Self : 'a;
     fn get_r_col<'a>(&'a self, index: usize) -> Self::RColRef<'a> {
-        LockingRRef(self.matrix[index].read().unwrap())
+        LockingRRef(self.0[index].read().unwrap())
     }
 
     type VColRef<'a> = LockingVRef<'a, C> where Self : 'a;
-    fn get_v_col<'a>(&'a self, index: usize) -> Option<Self::VColRef<'a>> {
-        self.options
-            .maintain_v
-            .then_some(LockingVRef(self.matrix[index].read().unwrap()))
+    fn get_v_col<'a>(&'a self, index: usize) -> Result<Self::VColRef<'a>, NoVMatrixError> {
+        let col_ref = self.0[index].read().unwrap();
+        let has_v = col_ref.1.is_some();
+        if has_v {
+            Ok(LockingVRef(col_ref))
+        } else {
+            Err(NoVMatrixError)
+        }
     }
 
     fn n_cols(&self) -> usize {
-        self.matrix.len()
-    }
-
-    type Options = LoPhatOptions;
-
-    fn decompose(matrix: impl Iterator<Item = C>, options: Option<Self::Options>) -> Self {
-        let options = options.unwrap_or_default();
-        let algo = LockingAlgorithm::new(matrix, options);
-        algo.reduce();
-        algo
+        self.0.len()
     }
 }
 
@@ -297,8 +330,8 @@ mod tests {
         #[test]
         fn locking_agrees_with_serial( matrix in sut_matrix(100) ) {
             let options = LoPhatOptions::default();
-            let serial_dgm = SerialAlgorithm::decompose(matrix.iter().cloned(), Some(options)).diagram();
-            let parallel_dgm = LockingAlgorithm::decompose(matrix.into_iter(), Some(options)).diagram();
+            let serial_dgm = SerialAlgorithm::init(Some(options)).add_cols(matrix.iter().cloned()).decompose().diagram();
+            let parallel_dgm = LockingAlgorithm::init(Some(options)).add_cols(matrix.into_iter()).decompose().diagram();
             assert_eq!(serial_dgm, parallel_dgm);
         }
     }
@@ -327,4 +360,4 @@ mod tests {
 }
 
 #[cfg(feature = "serde")]
-impl_rvd_serialize!(LockingAlgorithm);
+impl_rvd_serialize!(LockingDecomposition);
