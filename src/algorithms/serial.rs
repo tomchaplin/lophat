@@ -119,10 +119,11 @@ impl<C: Column> DecompositionAlgo<C> for SerialAlgorithm<C> {
     fn add_cols(mut self, cols: impl Iterator<Item = C>) -> Self {
         for column in cols {
             let dim = column.dimension();
+            let insertion_idx = self.r.len();
             self.r.push(column);
             if let Some(v) = self.v.as_mut() {
                 let mut v_col = C::new_with_dimension(dim);
-                v_col.add_entry(self.r.len());
+                v_col.add_entry(insertion_idx);
                 v.push(v_col);
             }
         }
