@@ -9,7 +9,9 @@ pub use anti_transpose::anti_transpose;
 pub use diagram::PersistenceDiagram;
 
 #[cfg(feature = "serde")]
-pub use file_format::{clone_to_file_format, clone_to_veccolumn, serialize_algo, RVDFileFormat};
+pub use file_format::{
+    clone_to_file_format, clone_to_veccolumn, serialize_algo, DecompositionFileFormat,
+};
 
 use crate::columns::{Column, ColumnMode};
 

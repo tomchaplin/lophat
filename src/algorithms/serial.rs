@@ -2,12 +2,14 @@
 use crate::impl_rvd_serialize;
 
 use crate::{
-    algorithms::RVDecomposition,
+    algorithms::Decomposition,
     columns::{Column, ColumnMode},
     options::LoPhatOptions,
 };
 
 use std::collections::HashMap;
+
+use super::{DecompositionAlgo, NoVMatrixError};
 
 /// Implements the standard left-to-right column additional algorithm of [Edelsbrunner et al.](https://doi.org/10.1109/SFCS.2000.892133).
 /// No optimisations have been implemented.
@@ -18,21 +20,22 @@ pub struct SerialAlgorithm<C: Column> {
     low_inverse: HashMap<usize, usize>,
 }
 
-impl<C: Column> SerialAlgorithm<C> {
-    fn new(options: LoPhatOptions) -> Self {
-        Self {
-            r: vec![],
-            v: options.maintain_v.then_some(vec![]),
-            low_inverse: HashMap::new(),
-        }
-    }
+fn col_idx_with_same_low<C: Column>(low_inverse: &HashMap<usize, usize>, col: &C) -> Option<usize> {
+    let pivot = col.pivot()?;
+    low_inverse.get(&pivot).copied()
+}
 
+impl<C: Column> SerialAlgorithm<C> {
+    #[allow(dead_code)]
     fn col_idx_with_same_low(&self, col: &C) -> Option<usize> {
         let pivot = col.pivot()?;
         self.low_inverse.get(&pivot).copied()
     }
+
     /// Uses the decomposition so far to reduce the next column of D with left-to-right columns addition.
-    pub fn reduce_column(&mut self, mut column: C) {
+    /// Not in use anymore!
+    #[allow(dead_code)]
+    fn reduce_column(&mut self, mut column: C) {
         column.set_mode(ColumnMode::Working);
         // v_col tracks how the final reduced column is built up
         // Currently column contains 1 lot of the latest column in D
@@ -69,34 +72,106 @@ impl<C: Column> SerialAlgorithm<C> {
             self.v.as_mut().unwrap().push(v_col);
         }
     }
+
+    fn reduce_column_at_index(&mut self, idx: usize) {
+        let maintain_v = self.v.is_some();
+        // prior_r contains indices [0, idx), post_r contains indices [idx, end)
+        let (prior_r, post_r) = self.r.split_at_mut(idx);
+        let mut v_splits = self.v.as_mut().map(|v| v.split_at_mut(idx));
+        post_r[0].set_mode(ColumnMode::Working);
+        if maintain_v {
+            v_splits.as_mut().unwrap().1[0].set_mode(ColumnMode::Working)
+        }
+        // Reduce the column, keeping track of how we do this in V
+        while let Some(col_idx) = col_idx_with_same_low(&self.low_inverse, &post_r[0]) {
+            post_r[0].add_col(&(prior_r[col_idx]));
+            if maintain_v {
+                let (prior_v, post_v) = v_splits.as_mut().unwrap();
+                post_v[0].add_col(&prior_v[col_idx]);
+            }
+        }
+        // Update low inverse
+        let final_pivot = self.r[idx].pivot();
+        if let Some(final_pivot) = final_pivot {
+            // This column has a lowest 1 and is being inserted at the end of R
+            self.low_inverse.insert(final_pivot, idx);
+        }
+        // Push to decomposition
+        self.r[idx].set_mode(ColumnMode::Storage);
+        if maintain_v {
+            self.v.as_mut().unwrap()[idx].set_mode(ColumnMode::Storage);
+        }
+    }
 }
 
-impl<C: Column> RVDecomposition<C> for SerialAlgorithm<C> {
+impl<C: Column> DecompositionAlgo<C> for SerialAlgorithm<C> {
+    type Options = LoPhatOptions;
+
+    fn init(options: Option<Self::Options>) -> Self {
+        let options = options.unwrap_or_default();
+        Self {
+            r: vec![],
+            v: options.maintain_v.then_some(vec![]),
+            low_inverse: HashMap::new(),
+        }
+    }
+
+    fn add_cols(mut self, cols: impl Iterator<Item = C>) -> Self {
+        for column in cols {
+            let dim = column.dimension();
+            self.r.push(column);
+            if let Some(v) = self.v.as_mut() {
+                let mut v_col = C::new_with_dimension(dim);
+                v_col.add_entry(self.r.len());
+                v.push(v_col);
+            }
+        }
+        self
+    }
+
+    fn add_entries(mut self, entries: impl Iterator<Item = (usize, usize)>) -> Self {
+        for (row, col) in entries {
+            let col = self
+                .r
+                .get_mut(col)
+                .expect("Column index should correspond to a pre-existing column");
+            col.add_entry(row);
+        }
+        self
+    }
+
+    type Decomposition = SerialDecomposition<C>;
+
+    fn decompose(mut self) -> Self::Decomposition {
+        for idx in 0..self.r.len() {
+            self.reduce_column_at_index(idx);
+        }
+        SerialDecomposition {
+            r: self.r,
+            v: self.v,
+        }
+    }
+}
+
+/// Return type of [`SerialAlgorithm`].
+pub struct SerialDecomposition<C: Column> {
+    r: Vec<C>,
+    v: Option<Vec<C>>,
+}
+
+impl<C: Column> Decomposition<C> for SerialDecomposition<C> {
+    type RColRef<'a> = &'a C where Self : 'a;
     fn get_r_col(&self, index: usize) -> &C {
         &self.r[index]
     }
 
-    fn get_v_col(&self, index: usize) -> Option<&C> {
-        Some(&self.v.as_ref()?[index])
+    type VColRef<'a> = &'a C where Self: 'a;
+    fn get_v_col(&self, index: usize) -> Result<&C, NoVMatrixError> {
+        Ok(&self.v.as_ref().ok_or(NoVMatrixError)?[index])
     }
 
     fn n_cols(&self) -> usize {
         self.r.len()
-    }
-
-    type RColRef<'a> = &'a C where Self : 'a;
-
-    type VColRef<'a> = &'a C where Self: 'a;
-
-    type Options = LoPhatOptions;
-
-    fn decompose(matrix: impl Iterator<Item = C>, options: Option<Self::Options>) -> Self {
-        let options = options.unwrap_or_default();
-        let algo = SerialAlgorithm::new(options);
-        matrix.fold(algo, |mut accum, next_col| {
-            accum.reduce_column(next_col);
-            accum
-        })
     }
 }
 
@@ -137,7 +212,10 @@ mod tests {
             paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
         };
         let options = LoPhatOptions::default();
-        let computed_diagram = SerialAlgorithm::decompose(matrix, Some(options)).diagram();
+        let computed_diagram = SerialAlgorithm::init(Some(options))
+            .add_cols(matrix)
+            .decompose()
+            .diagram();
         assert_eq!(computed_diagram, correct_diagram)
     }
 
@@ -150,7 +228,9 @@ mod tests {
             unpaired: HashSet::from_iter(vec![0, 13]),
             paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
         };
-        let decomp = SerialAlgorithm::decompose(matrix, Some(options));
+        let decomp = SerialAlgorithm::init(Some(options))
+            .add_cols(matrix)
+            .decompose();
         let computed_diagram = decomp.diagram();
         for col in decomp.v.unwrap() {
             println!("{:?}", col);
@@ -160,4 +240,4 @@ mod tests {
 }
 
 #[cfg(feature = "serde")]
-impl_rvd_serialize!(SerialAlgorithm);
+impl_rvd_serialize!(SerialDecomposition);
