@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="https://github.com/tomchaplin/lophat/raw/main/docs/lophat_logo.svg" alt="lophat logo" width="300" role="img">
+
 <h1>LoPHAT</h1>
 
 <b>Lo</b>ckfree <b>P</b>ersistent <b>H</b>omology <b>A</b>lgorithm <b>T</b>oolbox
