@@ -70,6 +70,7 @@ struct PersistenceDiagramWithReps {
 }
 
 #[pyfunction]
+#[pyo3(signature = (matrix, options=None))]
 fn compute_pairings_with_reps(
     matrix: &Bound<'_, PyAny>,
     options: Option<LoPhatOptions>,
