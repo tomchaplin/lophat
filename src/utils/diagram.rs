@@ -47,14 +47,10 @@ impl std::fmt::Display for PersistenceDiagram {
 #[cfg(feature = "python")]
 #[pymethods]
 impl PersistenceDiagram {
-    fn __richcmp__(&self, other: &PyAny, cmp_op: pyo3::basic::CompareOp) -> bool {
-        if let Ok(other) = other.extract::<PersistenceDiagram>() {
-            match cmp_op {
-                pyo3::pyclass::CompareOp::Eq => *self == other,
-                _ => panic!("Only able to check equality between PersistenceDiagram"),
-            }
-        } else {
-            false
+    fn __richcmp__(&self, other: &PersistenceDiagram, cmp_op: pyo3::pyclass::CompareOp) -> bool {
+        match cmp_op {
+            pyo3::pyclass::CompareOp::Eq => self == other,
+            _ => panic!("Only able to check equality between PersistenceDiagram"),
         }
     }
 
