@@ -195,7 +195,7 @@ checksum = "01cda141df6706de531b6c46c3a33ecca755538219bd484262fa09410c13539c"
 
 [[package]]
 name = "lophat"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "bit-set 0.8.0",
  "ciborium",
