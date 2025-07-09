@@ -11,3 +11,10 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
+
+[dependency-groups]
+test = ["pytest~=8.3", "tadasets~=0.2.1", "gudhi~=3.11", "numpy~=2.0"]
+
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+testpaths = ["tests"]
