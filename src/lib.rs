@@ -1,5 +1,5 @@
 //! # LoPHAT
-//! LoPHAT implements mutliple algorithms for computing persistent homology; in particular, the parallel, lockfree algorithm of Morozov and Nigmetov.
+//! LoPHAT implements multiple algorithms for computing persistent homology; in particular, the parallel, lockfree algorithm of Morozov and Nigmetov.
 //! The algorithms implemented are:
 //!
 //! * [`SerialAlgorithm`](algorithms::SerialAlgorithm) - the standard left-to-right column additional algorithm of [Edelsbrunner et al.](https://doi.org/10.1109/SFCS.2000.892133).
@@ -7,7 +7,7 @@
 //! * [`LockingAlgorithm`](algorithms::LockingAlgorithm) - a locking variant of the above, in which each column is stored behind a [`RwLock`](std::sync::RwLock).
 //!
 //! The primary interface to each of these algorithms is the [`DecompositionAlgo`](algorithms::DecompositionAlgo) trait.
-//! Once you have built up your input matrix in an implementor, you can decompose it via the [`decompose`](algorithms::DecompositionAlgo::decompose) method.
+//! Once you have built up your input matrix in an implementer, you can decompose it via the [`decompose`](algorithms::DecompositionAlgo::decompose) method.
 //! The output is a struct which implements [`Decomposition`](algorithms::Decomposition) -- a trait which contains methods for querying the resulting R=DV decomposition.
 //! In particular, you can then compute the persistence pairings via the [`diagram`](algorithms::Decomposition::diagram) method.
 //!
@@ -23,7 +23,7 @@
 //! // Import the column representation we want to use
 //! use lophat::columns::VecColumn;
 //! use lophat::utils::PersistenceDiagram;
-//! use hashbrown::HashSet;
+//! use std::collections::HashSet;
 //!
 //! fn build_sphere_triangulation() -> impl Iterator<Item = VecColumn> {
 //!     vec![

@@ -178,7 +178,7 @@ impl<C: Column> Decomposition<C> for SerialDecomposition<C> {
 
 #[cfg(test)]
 mod tests {
-    use hashbrown::HashSet;
+    use std::collections::HashSet;
 
     use crate::{columns::VecColumn, utils::PersistenceDiagram};
 

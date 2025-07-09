@@ -1,7 +1,7 @@
 [package]
 name = "lophat"
 version = "0.10.1"
-edition = "2021"
+edition = "2024"
 license = "MIT"
 description = "Lockfree Persistent Homology Algorithm Toolbox"
 homepage = "https://github.com/tomchaplin/lophat"
@@ -15,12 +15,12 @@ name = "lophat"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-bit-set = "0.5.3"
-hashbrown = { version = "0.13.2", features = ["rayon"] }
+bit-set = "0.8"
+# hashbrown = { version = "0.13.2", features = ["rayon"] }
 pinboard = "2.2.0"
-pyo3 = { version = "0.18.1", features = ["hashbrown", "extension-module"], optional=true }
-rayon = "1.7.0"
-serde = { version = "1.0.160", features = ["derive"], optional=true }
+pyo3 = { version = "0.18.0", features = ["extension-module"], optional=true }
+rayon = "1.10.0"
+serde = { version = "1.0.219", features = ["derive"], optional=true }
 
 [features]
 default = ["python", "local_thread_pool", "serde"]

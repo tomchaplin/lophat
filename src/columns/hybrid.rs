@@ -53,8 +53,8 @@ impl Column for BitSetVecHybridColumn {
 
     fn add_entry(&mut self, entry: usize) {
         match &mut self.internal {
-            HybridColumnInternal::BitSet(ref mut x) => x.add_entry(entry),
-            HybridColumnInternal::Vec(ref mut x) => x.add_entry(entry),
+            HybridColumnInternal::BitSet(x) => x.add_entry(entry),
+            HybridColumnInternal::Vec(x) => x.add_entry(entry),
         }
     }
 
@@ -90,8 +90,8 @@ impl Column for BitSetVecHybridColumn {
 
     fn set_dimension(&mut self, dimension: usize) {
         match &mut self.internal {
-            HybridColumnInternal::BitSet(ref mut x) => x.set_dimension(dimension),
-            HybridColumnInternal::Vec(ref mut x) => x.set_dimension(dimension),
+            HybridColumnInternal::BitSet(x) => x.set_dimension(dimension),
+            HybridColumnInternal::Vec(x) => x.set_dimension(dimension),
         }
     }
 
@@ -107,7 +107,7 @@ impl Column for BitSetVecHybridColumn {
                 vec_column.add_entries(self.entries());
                 self.internal = HybridColumnInternal::Vec(vec_column);
             }
-            _ => return,
+            _ => (),
         }
     }
 }

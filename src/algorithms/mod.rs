@@ -4,7 +4,7 @@
 //! By providing appropriate options during construction, each algorithm can also maintain V in the R=DV decomposition.
 
 use crate::{columns::Column, utils::PersistenceDiagram};
-use hashbrown::HashSet;
+use std::collections::HashSet;
 use std::ops::Deref;
 
 mod lock_free;
@@ -92,7 +92,7 @@ where
     /// If the column has not already been pushed via [`add_cols`](DecompositionAlgo::add_cols) then `panic!()`
     fn add_entries(self, entries: impl Iterator<Item = (usize, usize)>) -> Self;
 
-    /// Return tupe of [`decompose`](DecompositionAlgo::decompose) -- should carry sufficient information to query columns of the resulting decomposition.
+    /// Return tuple of [`decompose`](DecompositionAlgo::decompose) -- should carry sufficient information to query columns of the resulting decomposition.
     type Decomposition: Decomposition<C>;
     /// Decomposes the built-up matrix (D) into an R=DV decomposition, following the relevant algorithm and provided options.
     fn decompose(self) -> Self::Decomposition;
