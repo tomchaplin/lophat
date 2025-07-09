@@ -1,10 +1,11 @@
 [build-system]
-requires = ["maturin>=0.14,<0.15"]
+requires = ["maturin~=1.9.0"]
 build-backend = "maturin"
 
 [project]
 name = "lophat"
 requires-python = ">=3.7"
+dynamic = ["version"]
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",

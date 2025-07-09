@@ -28,5 +28,5 @@ local_thread_pool = []
 serde = ["dep:serde"]
 
 [dev-dependencies]
-ciborium = "0.2.0"
-proptest = "1.1.0"
+ciborium = "0.2.2"
+proptest = "1.7.0"
