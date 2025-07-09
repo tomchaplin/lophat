@@ -104,7 +104,7 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
             // We make a copy of the column because we want to mutate our local copy
             let mut curr_column = self.matrix[working_j].read();
             set_mode_of_pair(&mut curr_column, Working);
-            while let Some(l) = (&curr_column).0.pivot() {
+            while let Some(l) = curr_column.0.pivot() {
                 let piv_with_column_opt = self.get_col_with_pivot(l);
                 if let Some((piv, piv_column)) = piv_with_column_opt {
                     // Lines 17-24
@@ -135,7 +135,7 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
                 }
             }
             // Lines 25-27 (curr_column = 0 clause)
-            if (&curr_column.0).is_cycle() {
+            if curr_column.0.is_cycle() {
                 self.write_to_matrix(working_j, curr_column);
                 return;
             }
@@ -290,7 +290,7 @@ impl<C> Deref for LockFreeVRef<C> {
     type Target = C;
 
     fn deref(&self) -> &Self::Target {
-        &self.0.deref().1.as_ref().unwrap()
+        self.0.deref().1.as_ref().unwrap()
     }
 }
 
@@ -329,8 +329,7 @@ mod tests {
     proptest! {
         #[test]
         fn lockfree_agrees_with_serial( matrix in sut_matrix(100) ) {
-            let mut options = LoPhatOptions::default();
-            options.clearing = false;
+            let options = LoPhatOptions{ clearing: false, ..Default::default() };
             let serial_dgm = SerialAlgorithm::init(Some(options)).add_cols(matrix.iter().cloned()).decompose().diagram();
             let parallel_dgm = LockFreeAlgorithm::init(Some(options)).add_cols(matrix.into_iter()).decompose().diagram();
             assert_eq!(serial_dgm, parallel_dgm);
@@ -345,8 +344,7 @@ mod tests {
                 hybrid_col.add_entries(col.entries());
                 hybrid_col
             });
-            let mut options = LoPhatOptions::default();
-            options.clearing = false;
+            let options = LoPhatOptions{ clearing: false, ..Default::default()};
             let hybrid_dgm = LockFreeAlgorithm::init( Some(options)).add_cols(hybrid_matrix).decompose().diagram();
             let vec_dgm = LockFreeAlgorithm::init( Some(options)).add_cols(matrix.into_iter()).decompose().diagram();
             assert_eq!(vec_dgm, hybrid_dgm);
@@ -361,8 +359,7 @@ mod tests {
                 bit_set_col.add_entries(col.entries());
                 bit_set_col
             });
-            let mut options = LoPhatOptions::default();
-            options.clearing = false;
+            let options = LoPhatOptions{ clearing: false, ..Default::default()};
             let bit_set_dgm = LockFreeAlgorithm::init(Some(options)).add_cols(bit_set_matrix).decompose().diagram();
             let vec_dgm = LockFreeAlgorithm::init(Some(options)).add_cols(matrix.into_iter()).decompose().diagram();
             assert_eq!(vec_dgm, bit_set_dgm);

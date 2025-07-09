@@ -19,7 +19,7 @@ impl VecColumn {
     // Returns the index where we should try to insert next entry
     fn add_entry_starting_at(&mut self, entry: usize, starting_idx: usize) -> usize {
         let mut working_idx = starting_idx;
-        while let Some(value_at_idx) = self.boundary.iter().nth(working_idx) {
+        while let Some(value_at_idx) = self.boundary.get(working_idx) {
             match value_at_idx.cmp(&entry) {
                 Ordering::Less => {
                     working_idx += 1;
@@ -37,7 +37,7 @@ impl VecColumn {
         }
         // Bigger than all idxs in col - add to end
         self.boundary.push(entry);
-        return self.boundary.len() - 1;
+        self.boundary.len() - 1
     }
 }
 

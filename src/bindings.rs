@@ -79,9 +79,10 @@ fn compute_pairings_with_reps(
     options: Option<LoPhatOptions>,
 ) -> PersistenceDiagramWithReps {
     // Overwrite maintain_v in options
-    let mut options = options.unwrap_or(LoPhatOptions::default());
-    options.maintain_v = true;
-    let options = Some(options);
+    let options = Some(LoPhatOptions {
+        maintain_v: true,
+        ..options.unwrap_or_default()
+    });
     // Run R=DV decomposition
     let decomposition = if let Ok(matrix_as_vec) = matrix.extract::<Vec<(usize, Vec<usize>)>>() {
         let matrix_as_rs_iter = matrix_as_vec.into_iter().map(VecColumn::from);

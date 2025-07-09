@@ -108,10 +108,9 @@ impl<C: Column> DecompositionAlgo<C> for SerialAlgorithm<C> {
     type Options = LoPhatOptions;
 
     fn init(options: Option<Self::Options>) -> Self {
-        let options = options.unwrap_or_default();
         Self {
             r: vec![],
-            v: options.maintain_v.then_some(vec![]),
+            v: options.unwrap_or_default().maintain_v.then_some(vec![]),
             low_inverse: HashMap::new(),
         }
     }
@@ -212,8 +211,7 @@ mod tests {
             unpaired: HashSet::from_iter(vec![0, 13]),
             paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
         };
-        let options = LoPhatOptions::default();
-        let computed_diagram = SerialAlgorithm::init(Some(options))
+        let computed_diagram = SerialAlgorithm::init(Some(LoPhatOptions::default()))
             .add_cols(matrix)
             .decompose()
             .diagram();
@@ -223,8 +221,7 @@ mod tests {
     #[test]
     fn test_v_maintain() {
         let matrix = build_sphere_triangulation();
-        let mut options = LoPhatOptions::default();
-        options.maintain_v = true;
+        let options = LoPhatOptions{ maintain_v : true, ..Default::default() };
         let correct_diagram = PersistenceDiagram {
             unpaired: HashSet::from_iter(vec![0, 13]),
             paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
@@ -234,7 +231,7 @@ mod tests {
             .decompose();
         let computed_diagram = decomp.diagram();
         for col in decomp.v.unwrap() {
-            println!("{:?}", col);
+            println!("{col:?}");
         }
         assert_eq!(computed_diagram, correct_diagram)
     }

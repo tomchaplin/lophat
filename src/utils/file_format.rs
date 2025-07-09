@@ -77,7 +77,7 @@ macro_rules! impl_rvd_serialize {
 /// // Serialize into bytes (could write to file here instead)
 /// let mut bytes: Vec<u8> = vec![];
 /// into_writer(&decomp, &mut bytes).ok();
-/// // Deseralize to file format
+/// // Deserialize to file format
 /// let rvdff: DecompositionFileFormat = from_reader(bytes.as_slice()).ok().unwrap();
 /// ```
 #[derive(Deserialize, PartialEq, Debug)]
@@ -205,16 +205,12 @@ pub fn clone_to_file_format<C: Column, Algo: Decomposition<C>>(
             clone_to_veccolumn(col.deref())
         })
         .collect();
-    let v = algo.get_v_col(0).ok().and_then(|_| {
-        Some(
-            (0..algo.n_cols())
+    let v = algo.get_v_col(0).ok().map(|_| (0..algo.n_cols())
                 .map(|idx| {
                     let col = algo.get_v_col(idx).unwrap();
                     clone_to_veccolumn(col.deref())
                 })
-                .collect(),
-        )
-    });
+                .collect());
     DecompositionFileFormat::new(r, v)
 }
 
@@ -294,17 +290,19 @@ mod tests {
         let matrix = get_matrix();
         let correct_rvdff = get_rvdff(true);
         // Decompose via LFA
-        let mut options = LoPhatOptions::default();
-        options.maintain_v = true;
-        options.clearing = false; // Just do normal left-to-right reduction in decreasing dimensions
-        options.num_threads = 1; // So we can predict the output
+        let options = LoPhatOptions {
+            maintain_v: true,
+            clearing: false, // Just do normal left-to-right reduction in decreasing dimensions
+            num_threads: 1,  // So we can predict the output
+            ..Default::default()
+        };
         let decomp = LockFreeAlgorithm::init(Some(options))
             .add_cols(matrix)
             .decompose();
         // Serialize into bytes
         let mut bytes: Vec<u8> = vec![];
         into_writer(&decomp, &mut bytes).ok();
-        // Deseralize to file format
+        // Deserialize to file format
         let rvdff: DecompositionFileFormat = from_reader(bytes.as_slice()).ok().unwrap();
         // Check all columns are correct
         assert_eq!(rvdff, correct_rvdff)
@@ -314,17 +312,19 @@ mod tests {
     fn serialize_lfa_without_v() {
         let matrix = get_matrix();
         let correct_rvdff = get_rvdff(false); // Decompose via LFA
-        let mut options = LoPhatOptions::default();
-        options.maintain_v = false;
-        options.clearing = false; // Just do normal left-to-right reduction in decreasing dimensions
-        options.num_threads = 1; // So we can predict the output
+        let options = LoPhatOptions {
+            maintain_v: false, // Just do normal left-to-right reduction in decreasing dimensions
+            clearing: false,
+            num_threads: 1, // So we can predict the output
+            ..Default::default()
+        };
         let decomp = LockFreeAlgorithm::init(Some(options))
             .add_cols(matrix)
             .decompose();
         // Serialize into bytes
         let mut bytes: Vec<u8> = vec![];
         into_writer(&decomp, &mut bytes).ok();
-        // Deseralize to file format
+        // Deserialize to file format
         let rvdff: DecompositionFileFormat = from_reader(bytes.as_slice()).ok().unwrap();
         // Check all columns are correct and V is none
         assert_eq!(rvdff, correct_rvdff)

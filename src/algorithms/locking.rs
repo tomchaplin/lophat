@@ -87,7 +87,7 @@ impl<'a, C: Column> LockingAlgorithm<C> {
             // without locking other threads from reading
             let mut curr_column = self.matrix[working_j].read().unwrap().clone();
             set_mode_of_pair(&mut curr_column, Working);
-            while let Some(l) = (&curr_column).0.pivot() {
+            while let Some(l) = curr_column.0.pivot() {
                 let piv_with_column_opt = self.get_col_with_pivot(l);
                 if let Some((piv, piv_column)) = piv_with_column_opt {
                     // Lines 17-24
@@ -96,7 +96,7 @@ impl<'a, C: Column> LockingAlgorithm<C> {
                         // Only add V columns if we need to
                         if self.options.maintain_v {
                             let curr_v_col = curr_column.1.as_mut().unwrap();
-                            curr_v_col.add_col(&piv_column.1.as_ref().unwrap());
+                            curr_v_col.add_col(piv_column.1.as_ref().unwrap());
                         }
                     } else if piv > working_j {
                         self.write_to_matrix(working_j, curr_column);
@@ -113,7 +113,7 @@ impl<'a, C: Column> LockingAlgorithm<C> {
                     // piv = -1 case
                     self.write_to_matrix(working_j, curr_column);
                     let mut pivot_lock = self.pivots[l].write().unwrap();
-                    if *pivot_lock == None {
+                    if (*pivot_lock).is_none() {
                         *pivot_lock = Some(working_j);
                         return;
                     } else {
@@ -122,7 +122,7 @@ impl<'a, C: Column> LockingAlgorithm<C> {
                 }
             }
             // Lines 25-27 (curr_column = 0 clause)
-            if (&curr_column.0).is_cycle() {
+            if curr_column.0.is_cycle() {
                 self.write_to_matrix(working_j, curr_column);
                 return;
             }
@@ -288,7 +288,7 @@ impl<'a, C> Deref for LockingVRef<'a, C> {
     type Target = C;
 
     fn deref(&self) -> &Self::Target {
-        &self.0.deref().1.as_ref().unwrap()
+        self.0.deref().1.as_ref().unwrap()
     }
 }
 

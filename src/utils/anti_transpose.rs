@@ -2,8 +2,9 @@ use crate::columns::Column;
 
 /// Anti-transposes the input matrix (e.g. to compute cohomology).
 /// * `matrix` - a reference to a collected matrix (vector of columns).
+///
 /// Assumes that input matrix is square.
-pub fn anti_transpose<C: Column>(matrix: &Vec<C>) -> Vec<C> {
+pub fn anti_transpose<C: Column>(matrix: &[C]) -> Vec<C> {
     let matrix_width = matrix.len();
     let max_dim = matrix.iter().map(|col| col.dimension()).max().unwrap_or(0);
     let mut return_matrix: Vec<_> = matrix

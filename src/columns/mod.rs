@@ -8,7 +8,7 @@ pub use self::bit_set::BitSetColumn;
 pub use hybrid::BitSetVecHybridColumn;
 pub use vec::VecColumn;
 
-/// Enum representing the differnt modes that the column is in, which may impact the optimal representation.
+/// Enum representing the different modes that the column is in, which may impact the optimal representation.
 #[derive(Debug, Clone, Copy)]
 pub enum ColumnMode {
     /// A column in this mode is about to be mutated regularly, e.g. through [`add_col`](Column::add_col).
