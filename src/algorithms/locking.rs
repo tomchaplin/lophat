@@ -144,38 +144,38 @@ impl<'a, C: Column> LockingAlgorithm<C> {
         let clearing_idx = boundary_r
             .pivot()
             .expect("Attempted to clear using cycle column");
-        let clearing_dimension = self.matrix[clearing_idx].read().unwrap().0.dimension();
+        let clearing_degree = self.matrix[clearing_idx].read().unwrap().0.degree();
         // The cleared R column is empty
-        let r_col = C::new_with_dimension(clearing_dimension);
+        let r_col = C::new_with_degree(clearing_degree);
         // The corresponding V column should be the R column of the boundary
         let v_col = self.options.maintain_v.then(|| {
             let mut br = boundary_r.clone();
-            br.set_dimension(clearing_dimension);
+            br.set_degree(clearing_degree);
             br
         });
         self.write_to_matrix(clearing_idx, (r_col, v_col));
     }
 
-    /// Reduce all columns of given dimension in parallel, according to `options`.
-    pub fn reduce_dimension(&self, dimension: usize) {
-        // Reduce matrix for columns of that dimension
+    /// Reduce all columns of given degree in parallel, according to `options`.
+    pub fn reduce_in_degree(&self, degree: usize) {
+        // Reduce matrix for columns of that degree
         self.thread_pool.install(|| {
             (0..self.matrix.len())
                 .into_par_iter()
                 .with_min_len(self.options.min_chunk_len)
-                .filter(|&j| self.matrix[j].read().unwrap().0.dimension() == dimension)
+                .filter(|&j| self.matrix[j].read().unwrap().0.degree() == degree)
                 .for_each(|j| self.reduce_column(j));
         });
     }
 
-    /// Clear all columns of given dimension in parallel
-    pub fn clear_dimension(&self, dimension: usize) {
-        // Reduce matrix for columns of that dimension
+    /// Clear all columns of given degree in parallel
+    pub fn clear_in_degree(&self, degree: usize) {
+        // Reduce matrix for columns of that degree
         self.thread_pool.install(|| {
             (0..self.matrix.len())
                 .into_par_iter()
                 .with_min_len(self.options.min_chunk_len)
-                .filter(|&j| self.matrix[j].read().unwrap().0.dimension() == dimension)
+                .filter(|&j| self.matrix[j].read().unwrap().0.degree() == degree)
                 .filter(|&j| self.matrix[j].read().unwrap().0.is_boundary())
                 .for_each(|j| self.clear_with_column(j));
         });
@@ -183,10 +183,10 @@ impl<'a, C: Column> LockingAlgorithm<C> {
 
     /// Reduce all columns in parallel, according to `options`.
     pub fn reduce(&self) {
-        for dimension in (0..=self.max_dim).rev() {
-            self.reduce_dimension(dimension);
-            if self.options.clearing && dimension > 0 {
-                self.clear_dimension(dimension)
+        for degree in (0..=self.max_dim).rev() {
+            self.reduce_in_degree(degree);
+            if self.options.clearing && degree > 0 {
+                self.clear_in_degree(degree)
             }
         }
     }
@@ -226,9 +226,9 @@ impl<C: Column> DecompositionAlgo<C> for LockingAlgorithm<C> {
     fn add_cols(mut self, cols: impl Iterator<Item = C>) -> Self {
         let first_idx = self.matrix.len();
         let new_cols = cols.enumerate().map(|(idx, r_col)| {
-            self.max_dim = self.max_dim.max(r_col.dimension());
+            self.max_dim = self.max_dim.max(r_col.degree());
             if self.options.maintain_v {
-                let mut v_col = C::new_with_dimension(r_col.dimension());
+                let mut v_col = C::new_with_degree(r_col.degree());
                 v_col.add_entry(first_idx + idx);
                 RwLock::new((r_col, Some(v_col)))
             } else {
@@ -259,10 +259,10 @@ impl<C: Column> DecompositionAlgo<C> for LockingAlgorithm<C> {
         let column_height = self.options.column_height.unwrap_or(self.matrix.len());
         self.pivots = (0..column_height).map(|_| RwLock::new(None)).collect();
         // Decompose
-        for dimension in (0..=self.max_dim).rev() {
-            self.reduce_dimension(dimension);
-            if self.options.clearing && dimension > 0 {
-                self.clear_dimension(dimension)
+        for degree in (0..=self.max_dim).rev() {
+            self.reduce_in_degree(degree);
+            if self.options.clearing && degree > 0 {
+                self.clear_in_degree(degree)
             }
         }
         LockingDecomposition(self.matrix)

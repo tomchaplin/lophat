@@ -6,11 +6,11 @@ use crate::columns::Column;
 /// Assumes that input matrix is square.
 pub fn anti_transpose<C: Column>(matrix: &[C]) -> Vec<C> {
     let matrix_width = matrix.len();
-    let max_dim = matrix.iter().map(|col| col.dimension()).max().unwrap_or(0);
+    let max_dim = matrix.iter().map(|col| col.degree()).max().unwrap_or(0);
     let mut return_matrix: Vec<_> = matrix
         .iter()
         .rev()
-        .map(|col| C::new_with_dimension(max_dim - col.dimension()))
+        .map(|col| C::new_with_degree(max_dim - col.degree()))
         .collect();
     for (j, col) in matrix.iter().enumerate() {
         for i in col.entries() {

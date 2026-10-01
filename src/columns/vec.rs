@@ -7,12 +7,12 @@ use super::{Column, ColumnMode};
 
 /// A column represented by an increasing vector of the non-zero indices.
 ///
-/// To construct call [`VecColumn::from`] or use [`VecColumn::new_with_dimension`] and [`VecColumn::add_entries`]
+/// To construct call [`VecColumn::from`] or use [`VecColumn::new_with_degree`] and [`VecColumn::add_entries`]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct VecColumn {
     boundary: Vec<usize>,
-    dimension: usize,
+    degree: usize,
 }
 
 impl VecColumn {
@@ -73,22 +73,22 @@ impl Column for VecColumn {
         self.boundary = entries;
     }
 
-    fn dimension(&self) -> usize {
-        self.dimension
+    fn degree(&self) -> usize {
+        self.degree
     }
 
-    fn set_dimension(&mut self, dimension: usize) {
-        self.dimension = dimension;
+    fn set_degree(&mut self, degree: usize) {
+        self.degree = degree;
     }
 
     fn is_cycle(&self) -> bool {
         self.boundary.is_empty()
     }
 
-    fn new_with_dimension(dimension: usize) -> Self {
+    fn new_with_degree(degree: usize) -> Self {
         Self {
             boundary: vec![],
-            dimension,
+            degree,
         }
     }
 
@@ -99,10 +99,10 @@ impl Column for VecColumn {
 impl From<(usize, Vec<usize>)> for VecColumn {
     /// Constructs a `VecColumn`, from a tuple where
     /// `boundary` is the vector of non-zero indices, sorted in increasing order.
-    fn from((dimension, boundary): (usize, Vec<usize>)) -> Self {
+    fn from((degree, boundary): (usize, Vec<usize>)) -> Self {
         Self {
             boundary,
-            dimension,
+            degree,
         }
     }
 }

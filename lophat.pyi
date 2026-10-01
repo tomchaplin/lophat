@@ -9,7 +9,7 @@ def compute_pairings(
     """
     Decomposes the input matrix, using the lockfree algorithm.
 
-    :param matrix: The boundary matrix, provided in sparse column format. Each column is a tuple of (dimension, boundary) where boundary is the list of non-zero indices.
+    :param matrix: The boundary matrix, provided in sparse column format. Each column is a tuple of (degree, boundary) where boundary is the list of non-zero indices.
     :param anti_transpose: Whether to anti-transpose the matrix first. Best left True with clearing on. Set to False if input matrix non-square.
     :param options: Options to control the R=DV decomposition algorithm.
     :returns: The persistence pairings read off from the R=DV decomposition.
@@ -25,7 +25,7 @@ def compute_pairings_with_reps(
     Additionally returns representatives of the pairings found.
     Note that options will be overwritten to ensure that V is maintained in the decomposition.
 
-    :param matrix: The boundary matrix, provided in sparse column format. Each column is a tuple of (dimension, boundary) where boundary is the list of non-zero indices.
+    :param matrix: The boundary matrix, provided in sparse column format. Each column is a tuple of (degree, boundary) where boundary is the list of non-zero indices.
     :param options: Options to control the R=DV decomposition algorithm.
     :returns: The persistence pairings read off from the R=DV decomposition.
     """

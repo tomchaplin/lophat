@@ -3,11 +3,11 @@ use bit_set::BitSet;
 use super::{Column, ColumnMode};
 /// A column represented by a bit vector (with a set-like interface) of the non-zero indices.
 ///
-/// To construct call [`BitSetColumn::from`] or use [`BitSetColumn::new_with_dimension`] and [`BitSetColumn::add_entries`]
+/// To construct call [`BitSetColumn::from`] or use [`BitSetColumn::new_with_degree`] and [`BitSetColumn::add_entries`]
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct BitSetColumn {
     boundary: BitSet,
-    dimension: usize,
+    degree: usize,
 }
 
 impl Column for BitSetColumn {
@@ -43,22 +43,22 @@ impl Column for BitSetColumn {
         self.boundary = entries;
     }
 
-    fn dimension(&self) -> usize {
-        self.dimension
+    fn degree(&self) -> usize {
+        self.degree
     }
 
-    fn set_dimension(&mut self, dimension: usize) {
-        self.dimension = dimension;
+    fn set_degree(&mut self, degree: usize) {
+        self.degree = degree;
     }
 
     fn is_cycle(&self) -> bool {
         self.boundary.is_empty()
     }
 
-    fn new_with_dimension(dimension: usize) -> Self {
+    fn new_with_degree(degree: usize) -> Self {
         Self {
             boundary: BitSet::new(),
-            dimension,
+            degree,
         }
     }
 
@@ -69,10 +69,10 @@ impl Column for BitSetColumn {
 impl From<(usize, BitSet)> for BitSetColumn {
     /// Constructs a `BitSetColumn`, from a tuple where
     /// `boundary_vec` is the vector of non-zero indices, sorted in increasing order.
-    fn from((dimension, boundary): (usize, BitSet)) -> Self {
+    fn from((degree, boundary): (usize, BitSet)) -> Self {
         Self {
             boundary,
-            dimension,
+            degree,
         }
     }
 }

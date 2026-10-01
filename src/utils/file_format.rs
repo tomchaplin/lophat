@@ -118,7 +118,7 @@ impl Decomposition<VecColumn> for DecompositionFileFormat {
 /// Clones the column, converting it to [`VecColumn`] format.
 /// Under the hood, calls [`col.entries()`] to populate the output.
 pub fn clone_to_veccolumn<C: Column>(col: &C) -> VecColumn {
-    let mut output = VecColumn::new_with_dimension(col.dimension());
+    let mut output = VecColumn::new_with_degree(col.degree());
     output.add_entries(col.entries());
     output
 }
@@ -292,7 +292,7 @@ mod tests {
         // Decompose via LFA
         let options = LoPhatOptions {
             maintain_v: true,
-            clearing: false, // Just do normal left-to-right reduction in decreasing dimensions
+            clearing: false, // Just do normal left-to-right reduction in decreasing degrees
             num_threads: 1,  // So we can predict the output
             ..Default::default()
         };
@@ -313,7 +313,7 @@ mod tests {
         let matrix = get_matrix();
         let correct_rvdff = get_rvdff(false); // Decompose via LFA
         let options = LoPhatOptions {
-            maintain_v: false, // Just do normal left-to-right reduction in decreasing dimensions
+            maintain_v: false, // Just do normal left-to-right reduction in decreasing degrees
             clearing: false,
             num_threads: 1, // So we can predict the output
             ..Default::default()

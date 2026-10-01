@@ -21,7 +21,7 @@ pub enum ColumnMode {
 /// over the finite field F_2.
 ///
 /// Note the requirement to implement `From<(usize, Self::EntriesRepr)>`.
-/// The `usize` is the dimension and `Self::EntriesRepr` is the entries in the column.
+/// The `usize` is the degree and `Self::EntriesRepr` is the entries in the column.
 pub trait Column: Sync + Clone + Send + From<(usize, Self::EntriesRepr)> {
     /// Returns the index of the lowest non-zero column, or `None` if the column is empty.
     fn pivot(&self) -> Option<usize>;
@@ -43,10 +43,10 @@ pub trait Column: Sync + Clone + Send + From<(usize, Self::EntriesRepr)> {
     type EntriesRepr: Default;
     /// Efficiently override the column, by providing entries in the internal format.
     fn set_entries(&mut self, entries: Self::EntriesRepr);
-    /// Return the dimension of this column (assuming the matrix represents a chain complex boundary matrix)
-    fn dimension(&self) -> usize;
-    /// Change column to provided dimension
-    fn set_dimension(&mut self, dimension: usize);
+    /// Return the degree of this column (assuming the matrix represents a chain complex boundary matrix)
+    fn degree(&self) -> usize;
+    /// Change column to provided degree
+    fn set_degree(&mut self, degree: usize);
 
     /// Change the underlying representation of the column to optimise it for the corresponding `mode`.
     /// Only relevant for certain representations.
@@ -72,9 +72,9 @@ pub trait Column: Sync + Clone + Send + From<(usize, Self::EntriesRepr)> {
         }
     }
 
-    /// Init an empty column with the given dimension
-    fn new_with_dimension(dimension: usize) -> Self {
-        Self::from((dimension, Self::EntriesRepr::default()))
+    /// Init an empty column with the given degree
+    fn new_with_degree(degree: usize) -> Self {
+        Self::from((degree, Self::EntriesRepr::default()))
     }
 
     /// Removes all entries from the column

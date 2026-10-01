@@ -78,32 +78,32 @@ impl Column for BitSetVecHybridColumn {
     type EntriesRepr = Vec<usize>;
 
     fn set_entries(&mut self, entries: Self::EntriesRepr) {
-        self.internal = HybridColumnInternal::Vec(VecColumn::from((self.dimension(), entries)))
+        self.internal = HybridColumnInternal::Vec(VecColumn::from((self.degree(), entries)))
     }
 
-    fn dimension(&self) -> usize {
+    fn degree(&self) -> usize {
         match &self.internal {
-            HybridColumnInternal::BitSet(x) => x.dimension(),
-            HybridColumnInternal::Vec(x) => x.dimension(),
+            HybridColumnInternal::BitSet(x) => x.degree(),
+            HybridColumnInternal::Vec(x) => x.degree(),
         }
     }
 
-    fn set_dimension(&mut self, dimension: usize) {
+    fn set_degree(&mut self, degree: usize) {
         match &mut self.internal {
-            HybridColumnInternal::BitSet(x) => x.set_dimension(dimension),
-            HybridColumnInternal::Vec(x) => x.set_dimension(dimension),
+            HybridColumnInternal::BitSet(x) => x.set_degree(degree),
+            HybridColumnInternal::Vec(x) => x.set_degree(degree),
         }
     }
 
     fn set_mode(&mut self, mode: ColumnMode) {
         match (mode, &self.internal) {
             (ColumnMode::Working, HybridColumnInternal::Vec(_)) => {
-                let mut set_column = BitSetColumn::new_with_dimension(self.dimension());
+                let mut set_column = BitSetColumn::new_with_degree(self.degree());
                 set_column.add_entries(self.entries());
                 self.internal = HybridColumnInternal::BitSet(set_column);
             }
             (ColumnMode::Storage, HybridColumnInternal::BitSet(_)) => {
-                let mut vec_column = VecColumn::new_with_dimension(self.dimension());
+                let mut vec_column = VecColumn::new_with_degree(self.degree());
                 vec_column.add_entries(self.entries());
                 self.internal = HybridColumnInternal::Vec(vec_column);
             }

@@ -10,7 +10,7 @@ For more information, please see `the repository <https://github.com/tomchaplin/
 
     Decomposes the input matrix, using the lockfree algorithm.
 
-    :param matrix: The boundary matrix, provided in sparse column format. Each column is a tuple of (dimension, boundary) where boundary is the list of non-zero indices.
+    :param matrix: The boundary matrix, provided in sparse column format. Each column is a tuple of (degree, boundary) where boundary is the list of non-zero indices.
     :type matrix: List[Tuple[int, List[int]]] | Iterator[Tuple[int, List[int]]]
     :param anti_transpose: Whether to anti-transpose the matrix first; best left True with clearing on. Set to False if input matrix non-square.
     :type anti_transpose: bool
@@ -25,7 +25,7 @@ For more information, please see `the repository <https://github.com/tomchaplin/
     Additionally returns representatives of the pairings found.
     Note that options will be overwritten to ensure that V is maintained in the decomposition.
 
-    :param matrix: The boundary matrix, provided in sparse column format. Each column is a tuple of (dimension, boundary) where boundary is the list of non-zero indices.
+    :param matrix: The boundary matrix, provided in sparse column format. Each column is a tuple of (degree, boundary) where boundary is the list of non-zero indices.
     :type matrix: List[Tuple[int, List[int]]] | Iterator[Tuple[int, List[int]]]
     :param options: Options to control the R=DV decomposition algorithm.
     :type options: LoPhatOptions
