@@ -1,19 +1,22 @@
-[build-system]
-requires = ["maturin~=1.9.0"]
-build-backend = "maturin"
-
 [project]
 name = "lophat"
 requires-python = ">=3.10"
-dynamic = ["version"]
 classifiers = [
-    "Programming Language :: Rust",
-    "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+  "Programming Language :: Rust",
 ]
+dynamic = ["version"]
 
 [dependency-groups]
-test = ["pytest~=8.3", "tadasets~=0.2.1", "gudhi~=3.11", "numpy~=2.0"]
+dev = [
+  "pyrefly>=1.3.2",
+]
+test = ["gudhi~=3.13", "numpy~=2.0", "pytest~=8.3", "tadasets~=0.2.1"]
+
+[build-system]
+requires = ["maturin~=1.9.0"]
+build-backend = "maturin"
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
