@@ -15,9 +15,15 @@ pub use lock_free::{LockFreeAlgorithm, LockFreeDecomposition};
 pub use locking::{LockingAlgorithm, LockingDecomposition};
 pub use serial::{SerialAlgorithm, SerialDecomposition};
 
-/// Error type returned when attempting to query a column of V from a decomposition in which V was not maintained.
-#[derive(Debug)]
-pub struct NoVMatrixError;
+/// Error returned when attempting to query a column of V from an empty decomposition or a
+/// decomposition in which V was not maintained.
+#[derive(Debug, PartialEq, Eq)]
+pub enum NoVMatrixError {
+    /// The decomposition has no columns, so V cannot be queried.
+    EmptyDecompositionError,
+    /// The decomposition is nonempty, but V was not maintained.
+    VMatrixDiscardedError,
+}
 
 /// A struct implementing this trait represents the output of an R=DV decomposition of a matrix D and is typically constructed by [`DecompositionAlgo::decompose`].
 ///
@@ -31,7 +37,8 @@ where
     type RColRef<'a>: Deref<Target = C> + 'a
     where
         Self: 'a;
-    /// Returns a reference to the column in position `index` of R, in the decomposition
+    /// Returns a reference to the column in position `index` of R, in the decomposition.
+    /// Panics if the index is not strictly less than [`n_cols`](Self::n_cols).
     fn get_r_col<'a>(&'a self, index: usize) -> Self::RColRef<'a>;
 
     /// Return type of [`get_v_col`](Self::get_v_col), typically `&'a C`.
@@ -39,7 +46,10 @@ where
     where
         Self: 'a;
     /// Returns a reference to the column in position `index` of V, in the decomposition.
-    /// Returns `NoVMatrixError` if V was not maintained by the algorithm.
+    /// Returns [`NoVMatrixError::EmptyDecompositionError`] if the decomposition is empty,
+    /// or [`NoVMatrixError::VMatrixDiscardedError`] if it is nonempty but V was not maintained.
+    /// For nonempty decompositions, this function will panic if the index is not strictly less than
+    /// [`n_cols`](Self::n_cols).
     fn get_v_col<'a>(&'a self, index: usize) -> Result<Self::VColRef<'a>, NoVMatrixError>;
 
     /// Returns the number of column in R (equal to the number of columns in D).
@@ -63,11 +73,15 @@ where
         PersistenceDiagram { unpaired, paired }
     }
 
-    /// By checking whether `self.get_v_col(0)` returns an error, determines whether the V matrix was maintained for this decomposition.
-    fn has_v(&self) -> bool {
-        // If n_cols is zero then it may as well have v
-        // Otherwise we just check whether we can get the first v column
-        self.n_cols() == 0 || self.get_v_col(0).is_ok()
+    /// Returns `Ok(())` if the nonempty decomposition retained V.
+    /// Returns [`NoVMatrixError::EmptyDecompositionError`] for an empty decomposition,
+    /// whose original `maintain_v` setting cannot be determined from column presence,
+    /// or [`NoVMatrixError::VMatrixDiscardedError`] if V was not maintained.
+    fn has_v(&self) -> Result<(), NoVMatrixError> {
+        if self.n_cols() == 0 {
+            return Err(NoVMatrixError::EmptyDecompositionError);
+        }
+        self.get_v_col(0).map(|_| ())
     }
 }
 
@@ -96,4 +110,65 @@ where
     type Decomposition: Decomposition<C>;
     /// Decomposes the built-up matrix (D) into an R=DV decomposition, following the relevant algorithm and provided options.
     fn decompose(self) -> Self::Decomposition;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        Decomposition, DecompositionAlgo, LockFreeAlgorithm, LockingAlgorithm, NoVMatrixError,
+        SerialAlgorithm,
+    };
+    use crate::{columns::VecColumn, options::LoPhatOptions};
+
+    fn check_v_presence<A: DecompositionAlgo<VecColumn, Options = LoPhatOptions>>() {
+        for maintain_v in [false, true] {
+            let options = LoPhatOptions {
+                maintain_v,
+                num_threads: 1,
+                ..Default::default()
+            };
+            let empty = A::init(Some(options)).decompose();
+            assert_eq!(empty.n_cols(), 0);
+            assert_eq!(empty.has_v(), Err(NoVMatrixError::EmptyDecompositionError));
+            assert_eq!(
+                empty.get_v_col(0).err(),
+                Some(NoVMatrixError::EmptyDecompositionError)
+            );
+
+            // A zero column still occupies a slot, so this decomposition is nonempty.
+            let nonempty = A::init(Some(options))
+                .add_cols(std::iter::once(VecColumn::from((0, vec![]))))
+                .decompose();
+            assert_eq!(nonempty.n_cols(), 1);
+            assert_eq!(*nonempty.get_r_col(0), VecColumn::from((0, vec![])));
+            if maintain_v {
+                assert_eq!(nonempty.has_v(), Ok(()));
+                assert_eq!(
+                    *nonempty.get_v_col(0).unwrap(),
+                    VecColumn::from((0, vec![0]))
+                );
+            } else {
+                assert_eq!(nonempty.has_v(), Err(NoVMatrixError::VMatrixDiscardedError));
+                assert_eq!(
+                    nonempty.get_v_col(0).err(),
+                    Some(NoVMatrixError::VMatrixDiscardedError)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn serial_reports_v_presence() {
+        check_v_presence::<SerialAlgorithm<VecColumn>>();
+    }
+
+    #[test]
+    fn lockfree_reports_v_presence() {
+        check_v_presence::<LockFreeAlgorithm<VecColumn>>();
+    }
+
+    #[test]
+    fn locking_reports_v_presence() {
+        check_v_presence::<LockingAlgorithm<VecColumn>>();
+    }
 }

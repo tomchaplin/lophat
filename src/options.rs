@@ -9,7 +9,11 @@ use pyo3::prelude::*;
 #[cfg_attr(feature = "python", pyclass(get_all, set_all))]
 #[derive(Copy, Clone)]
 pub struct LoPhatOptions {
-    /// If true, returns full R=DV decomposition, otherwise the resulting decomposition will always return `None` from [`get_v_col`](crate::algorithms::Decomposition::get_v_col).
+    /// If true, retains V in the R=DV decomposition. Otherwise, nonempty decompositions
+    /// return [`VMatrixDiscardedError`](crate::algorithms::NoVMatrixError::VMatrixDiscardedError)
+    /// from [`get_v_col`](crate::algorithms::Decomposition::get_v_col).
+    /// Empty decompositions return [`EmptyDecompositionError`](crate::algorithms::NoVMatrixError::EmptyDecompositionError)
+    /// regardless of this option.
     pub maintain_v: bool,
     ///  Number of threads to use in thread pool; ignored by serial algorithms.
     ///   see [`num_threads`](rayon::ThreadPoolBuilder::num_threads) for more details.

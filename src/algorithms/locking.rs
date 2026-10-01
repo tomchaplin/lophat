@@ -300,12 +300,15 @@ impl<C: Column + 'static> Decomposition<C> for LockingDecomposition<C> {
 
     type VColRef<'a> = LockingVRef<'a, C> where Self : 'a;
     fn get_v_col<'a>(&'a self, index: usize) -> Result<Self::VColRef<'a>, NoVMatrixError> {
+        if self.n_cols() == 0 {
+            return Err(NoVMatrixError::EmptyDecompositionError);
+        }
         let col_ref = self.0[index].read().unwrap();
         let has_v = col_ref.1.is_some();
         if has_v {
             Ok(LockingVRef(col_ref))
         } else {
-            Err(NoVMatrixError)
+            Err(NoVMatrixError::VMatrixDiscardedError)
         }
     }
 

@@ -48,6 +48,7 @@ macro_rules! impl_rvd_serialize {
 /// The struct can be serialized and deserialized, and hence written to file.
 ///
 /// Internally, R and V are stored as a vector of [`VecColumn`].
+/// Empty decompositions are serialized with an empty R matrix and `v: None`.
 /// Usually, this is constructed via serializing another [`Decomposition`] (e.g. using [`impl_rvd_serialize`]) and then deserializing
 /// into a [`DecompositionFileFormat`].
 ///
@@ -107,7 +108,13 @@ impl Decomposition<VecColumn> for DecompositionFileFormat {
         Self: 'a;
 
     fn get_v_col<'a>(&'a self, index: usize) -> Result<Self::VColRef<'a>, NoVMatrixError> {
-        Ok(&self.v.as_ref().ok_or(NoVMatrixError)?[index])
+        if self.n_cols() == 0 {
+            return Err(NoVMatrixError::EmptyDecompositionError);
+        }
+        Ok(&self
+            .v
+            .as_ref()
+            .ok_or(NoVMatrixError::VMatrixDiscardedError)?[index])
     }
 
     fn n_cols(&self) -> usize {
@@ -124,6 +131,7 @@ pub fn clone_to_veccolumn<C: Column>(col: &C) -> VecColumn {
 }
 
 /// After serializing your decomposition, you should deserialize to [`DecompositionFileFormat`].
+/// Empty decompositions are serialized with an empty R matrix and `v: None`.
 pub fn serialize_algo<C, Algo, S>(algo: &Algo, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
@@ -166,16 +174,18 @@ where
     rvdff.serialize_field("r", &r_col_iter)?;
 
     // Serialize V
-    let has_v = algo.get_v_col(0).is_ok();
-    let v_col_iter_opt = if has_v {
-        let v_col_iter = (0..algo.n_cols()).map(|idx| {
-            // Can safely unwrap everything because V was maintained
-            let col = algo.get_v_col(idx).unwrap();
-            clone_to_veccolumn(col.deref())
-        });
-        Some(IteratorWrapper::new(v_col_iter))
-    } else {
-        None
+    let v_col_iter_opt = match algo.has_v() {
+        Ok(()) => {
+            let v_col_iter = (0..algo.n_cols()).map(|idx| {
+                // Can safely unwrap everything because V was maintained
+                let col = algo.get_v_col(idx).unwrap();
+                clone_to_veccolumn(col.deref())
+            });
+            Some(IteratorWrapper::new(v_col_iter))
+        }
+        Err(NoVMatrixError::EmptyDecompositionError | NoVMatrixError::VMatrixDiscardedError) => {
+            None
+        }
     };
     rvdff.serialize_field("v", &v_col_iter_opt)?;
     rvdff.end()
@@ -196,6 +206,7 @@ impl Serialize for DecompositionFileFormat {
 /// Typically, it is more useful to directly serialize `algo`, e.g. using the [`impl_rvd_serialize`] macro.
 /// This avoids making an extra copy of `algo` in memory, before writing to file.
 /// The resulting serialization can then be deserialized into a [`DecompositionFileFormat`].
+/// Empty decompositions are serialized with an empty R matrix and `v: None`.
 pub fn clone_to_file_format<C: Column, Algo: Decomposition<C>>(
     algo: &Algo,
 ) -> DecompositionFileFormat {
@@ -205,25 +216,122 @@ pub fn clone_to_file_format<C: Column, Algo: Decomposition<C>>(
             clone_to_veccolumn(col.deref())
         })
         .collect();
-    let v = algo.get_v_col(0).ok().map(|_| (0..algo.n_cols())
+    let v = match algo.has_v() {
+        Ok(()) => Some(
+            (0..algo.n_cols())
                 .map(|idx| {
                     let col = algo.get_v_col(idx).unwrap();
                     clone_to_veccolumn(col.deref())
                 })
-                .collect());
+                .collect(),
+        ),
+        Err(NoVMatrixError::EmptyDecompositionError | NoVMatrixError::VMatrixDiscardedError) => {
+            None
+        }
+    };
     DecompositionFileFormat::new(r, v)
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        algorithms::{DecompositionAlgo, LockFreeAlgorithm},
+        algorithms::{
+            Decomposition, DecompositionAlgo, LockFreeAlgorithm, LockingAlgorithm, NoVMatrixError,
+            SerialAlgorithm,
+        },
         columns::VecColumn,
         options::LoPhatOptions,
     };
     use ciborium::{de::from_reader, ser::into_writer};
 
-    use super::DecompositionFileFormat;
+    use super::{DecompositionFileFormat, clone_to_file_format};
+    use serde::Serialize;
+
+    fn check_serialization_and_clone<D: Decomposition<VecColumn> + Serialize>(
+        decomp: &D,
+        expected: &DecompositionFileFormat,
+    ) {
+        assert_eq!(&clone_to_file_format(decomp), expected);
+        let mut bytes = Vec::new();
+        into_writer(decomp, &mut bytes).unwrap();
+        let restored: DecompositionFileFormat = from_reader(bytes.as_slice()).unwrap();
+        assert_eq!(&restored, expected);
+        assert_eq!(restored.has_v(), expected.has_v());
+    }
+
+    fn check_algorithm_serialization<A: DecompositionAlgo<VecColumn, Options = LoPhatOptions>>()
+    where
+        A::Decomposition: Serialize,
+    {
+        for maintain_v in [false, true] {
+            let options = LoPhatOptions {
+                maintain_v,
+                clearing: false,
+                num_threads: 1,
+                ..Default::default()
+            };
+            let empty = A::init(Some(options)).decompose();
+            check_serialization_and_clone(&empty, &DecompositionFileFormat::new(vec![], None));
+
+            let zero_column = A::init(Some(options))
+                .add_cols(std::iter::once(VecColumn::from((0, vec![]))))
+                .decompose();
+            let expected = DecompositionFileFormat::new(
+                vec![VecColumn::from((0, vec![]))],
+                maintain_v.then(|| vec![VecColumn::from((0, vec![0]))]),
+            );
+            check_serialization_and_clone(&zero_column, &expected);
+
+            let simplex = A::init(Some(options)).add_cols(get_matrix()).decompose();
+            check_serialization_and_clone(&simplex, &get_rvdff(maintain_v));
+        }
+    }
+
+    #[test]
+    fn serialize_and_clone_serial_edge_cases() {
+        check_algorithm_serialization::<SerialAlgorithm<VecColumn>>();
+    }
+
+    #[test]
+    fn serialize_and_clone_lockfree_edge_cases() {
+        check_algorithm_serialization::<LockFreeAlgorithm<VecColumn>>();
+    }
+
+    #[test]
+    fn serialize_and_clone_locking_edge_cases() {
+        check_algorithm_serialization::<LockingAlgorithm<VecColumn>>();
+    }
+
+    #[test]
+    fn empty_fileformat_is_canonicalized() {
+        for v in [None, Some(vec![])] {
+            let decomp = DecompositionFileFormat::new(vec![], v);
+            assert_eq!(decomp.has_v(), Err(NoVMatrixError::EmptyDecompositionError));
+            assert_eq!(
+                decomp.get_v_col(0).err(),
+                Some(NoVMatrixError::EmptyDecompositionError)
+            );
+            check_serialization_and_clone(&decomp, &DecompositionFileFormat::new(vec![], None));
+        }
+    }
+
+    #[test]
+    fn nonempty_fileformat_reports_v_presence() {
+        for maintain_v in [false, true] {
+            let decomp = DecompositionFileFormat::new(
+                vec![VecColumn::from((0, vec![]))],
+                maintain_v.then(|| vec![VecColumn::from((0, vec![0]))]),
+            );
+            let expected = if maintain_v {
+                Ok(())
+            } else {
+                Err(NoVMatrixError::VMatrixDiscardedError)
+            };
+            assert_eq!(decomp.has_v(), expected);
+            assert_eq!(decomp.get_v_col(0).map(|_| ()), expected);
+            check_serialization_and_clone(&decomp, &decomp);
+        }
+    }
 
     fn get_matrix() -> impl Iterator<Item = VecColumn> {
         vec![

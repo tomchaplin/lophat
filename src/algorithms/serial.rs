@@ -167,7 +167,13 @@ impl<C: Column> Decomposition<C> for SerialDecomposition<C> {
 
     type VColRef<'a> = &'a C where Self: 'a;
     fn get_v_col(&self, index: usize) -> Result<&C, NoVMatrixError> {
-        Ok(&self.v.as_ref().ok_or(NoVMatrixError)?[index])
+        if self.n_cols() == 0 {
+            return Err(NoVMatrixError::EmptyDecompositionError);
+        }
+        Ok(&self
+            .v
+            .as_ref()
+            .ok_or(NoVMatrixError::VMatrixDiscardedError)?[index])
     }
 
     fn n_cols(&self) -> usize {
