@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 
 /// Stores the pairings from a matrix decomposition,
 /// as well as those columns which did not appear in a pairing.
-#[cfg_attr(feature = "python", pyclass(get_all, set_all))]
+#[cfg_attr(feature = "python", pyclass(skip_from_py_object, get_all, set_all))]
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct PersistenceDiagram {
     /// The set of unpaired columns indexes.

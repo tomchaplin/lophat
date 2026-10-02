@@ -66,7 +66,7 @@ For example usage, see the file `example.py` or [this Google colab notebook](htt
 - [ ] Decide on new Python bindings
 - [ ] Increase property testing
 - [ ] Write unit tests
-- [ ] Write integration tests (testing V) 
+- [ ] Write integration tests (testing V)
 - [ ] Benchmark
 - [ ] Abstract out matrix trait?
 - [ ] Reduce memory usage when V not maintained

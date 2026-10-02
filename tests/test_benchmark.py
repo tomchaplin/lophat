@@ -1,8 +1,9 @@
-import tadasets
-from gudhi import RipsComplex
-from lophat import compute_pairings, LoPhatOptions
 import numpy as np
 import pytest
+import tadasets
+from gudhi import RipsComplex
+
+from lophat import LoPhatOptions, compute_pairings
 
 n_threads_range = list(range(1, 9))
 

@@ -1,6 +1,6 @@
 [package]
 name = "lophat"
-version = "0.11.0"
+version = "0.12.0"
 edition = "2024"
 license = "MIT"
 description = "Lockfree Persistent Homology Algorithm Toolbox"
@@ -15,9 +15,9 @@ name = "lophat"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-bit-set = "0.8"
+bit-set = "0.11.1"
 pinboard = "2.2.0"
-pyo3 = { version = "0.25.1", features = ["extension-module"], optional=true }
+pyo3 = { version = "0.29.3", optional=true }
 rayon = "1.10.0"
 serde = { version = "1.0.219", features = ["derive"], optional=true }
 

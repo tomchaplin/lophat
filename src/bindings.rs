@@ -72,13 +72,13 @@ struct PersistenceDiagramWithReps {
 #[pyfunction]
 #[pyo3(signature = (matrix, options=None))]
 fn compute_pairings_with_reps(
-    matrix: &Bound<'_, PyAny>,
-    options: Option<LoPhatOptions>,
+    matrix: Bound<'_, PyAny>,
+    options: Option<&LoPhatOptions>,
 ) -> PersistenceDiagramWithReps {
     // Overwrite maintain_v in options
     let options = Some(LoPhatOptions {
         maintain_v: true,
-        ..options.unwrap_or_default()
+        ..*options.unwrap_or(&LoPhatOptions::default())
     });
     // Run R=DV decomposition
     let decomposition = if let Ok(matrix_as_vec) = matrix.extract::<Vec<(usize, Vec<usize>)>>() {
@@ -133,17 +133,17 @@ fn compute_pairings_with_reps(
 fn compute_pairings(
     matrix: &Bound<'_, PyAny>,
     anti_transpose: bool,
-    options: Option<LoPhatOptions>,
+    options: Option<&LoPhatOptions>,
 ) -> PersistenceDiagram {
     if anti_transpose {
-        compute_pairings_anti_transpose(matrix, options)
+        compute_pairings_anti_transpose(matrix, options.copied())
     } else {
-        compute_pairings_non_transpose(matrix, options)
+        compute_pairings_non_transpose(matrix, options.copied())
     }
 }
 
 // A Python module implemented in Rust.
-#[pymodule]
+#[pymodule(gil_used = true)]
 fn lophat(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_pairings, m)?)?;
     m.add_function(wrap_pyfunction!(compute_pairings_with_reps, m)?)?;
