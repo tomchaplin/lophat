@@ -72,60 +72,62 @@ struct PersistenceDiagramWithReps {
 #[pyfunction]
 #[pyo3(signature = (matrix, options=None))]
 fn compute_pairings_with_reps(
+    py: Python<'_>,
     matrix: Bound<'_, PyAny>,
-    options: Option<&LoPhatOptions>,
+    options: Option<Bound<'_, LoPhatOptions>>,
 ) -> PersistenceDiagramWithReps {
     // Overwrite maintain_v in options
     let options = Some(LoPhatOptions {
         maintain_v: true,
-        ..*options.unwrap_or(&LoPhatOptions::default())
+        ..options.map_or(LoPhatOptions::default(), |bound_opt| *bound_opt.borrow())
     });
-    // Run R=DV decomposition
-    let decomposition = if let Ok(matrix_as_vec) = matrix.extract::<Vec<(usize, Vec<usize>)>>() {
-        let matrix_as_rs_iter = matrix_as_vec.into_iter().map(VecColumn::from);
-        LockFreeAlgorithm::init(options)
-            .add_cols(matrix_as_rs_iter)
-            .decompose()
+    // Get all the data from Python into Rust so we can detach
+    let matrix_as_rs_iter: Box<dyn Iterator<Item = VecColumn>>;
+    if let Ok(matrix_as_vec) = matrix.extract::<Vec<(usize, Vec<usize>)>>() {
+        matrix_as_rs_iter = Box::new(matrix_as_vec.into_iter().map(VecColumn::from));
     } else if let Ok(py_iter) = matrix.try_iter() {
-        let matrix_as_rs_iter = py_iter.map(|col| {
+        matrix_as_rs_iter = Box::new(py_iter.map(|col| {
             col.and_then(|col_ok| col_ok.extract::<(usize, Vec<usize>)>())
                 .map(VecColumn::from)
                 .expect("Column is a list of unsigned integers")
-        });
-        LockFreeAlgorithm::init(options)
-            .add_cols(matrix_as_rs_iter)
-            .decompose()
+        }));
     } else {
-        panic!("Could not coerce input matrix into List[List[int]] | Iterator[List[int]]");
+        panic!("Could not coerce input matrix into list[tuple[int, list[int]]] | Iterator[tuple[int, list[int]]]");
     };
-    // Read off diagram and pull out representatives
-    let mut diagram = decomposition.diagram();
-    let (paired, paired_reps): (Vec<_>, Vec<Vec<_>>) = diagram
-        .paired
-        .drain()
-        .map(|pairing| {
-            (
-                pairing,
-                decomposition.get_r_col(pairing.1).entries().collect(),
-            )
-        })
-        .unzip();
-    let (unpaired, unpaired_reps): (Vec<_>, Vec<Vec<_>>) = diagram
-        .unpaired
-        .drain()
-        .map(|birth| {
-            (
-                birth,
-                decomposition.get_v_col(birth).unwrap().entries().collect(),
-            )
-        })
-        .unzip();
-    PersistenceDiagramWithReps {
-        paired,
-        unpaired,
-        paired_reps,
-        unpaired_reps,
-    }
+    let algo = LockFreeAlgorithm::init(options).add_cols(matrix_as_rs_iter);
+
+    // Run R=DV decomposition
+    py.detach(|| {
+        let decomposition = algo.decompose();
+        // Read off diagram and pull out representatives
+        let mut diagram = decomposition.diagram();
+        let (paired, paired_reps): (Vec<_>, Vec<Vec<_>>) = diagram
+            .paired
+            .drain()
+            .map(|pairing| {
+                (
+                    pairing,
+                    decomposition.get_r_col(pairing.1).entries().collect(),
+                )
+            })
+            .unzip();
+        let (unpaired, unpaired_reps): (Vec<_>, Vec<Vec<_>>) = diagram
+            .unpaired
+            .drain()
+            .map(|birth| {
+                (
+                    birth,
+                    decomposition.get_v_col(birth).unwrap().entries().collect(),
+                )
+            })
+            .unzip();
+        PersistenceDiagramWithReps {
+            paired,
+            unpaired,
+            paired_reps,
+            unpaired_reps,
+        }
+    })
 }
 
 #[pyfunction]
