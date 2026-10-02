@@ -2,31 +2,33 @@
 name = "lophat"
 version = "0.12.0"
 edition = "2024"
-license = "MIT"
 description = "Lockfree Persistent Homology Algorithm Toolbox"
+readme = "README.md"
 homepage = "https://github.com/tomchaplin/lophat"
 repository = "https://github.com/tomchaplin/lophat"
-readme = "README.md"
-exclude = ["scripts/**/*", "docs/**/*"]
+license = "MIT"
+keywords = ["filtered chain complex", "persistence module", "persistent homology", "topological data analysis"]
+categories = ["mathematics", "science"]
+exclude = ["docs/**/*", "scripts/**/*"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
+crate-type = ["cdylib", "lib"]
 name = "lophat"
-crate-type = ["lib", "cdylib"]
 
 [dependencies]
 bit-set = "0.11.1"
 pinboard = "2.2.0"
-pyo3 = { version = "0.29.3", optional=true }
+pyo3 = { version = "0.29.3", optional = true }
 rayon = "1.10.0"
-serde = { version = "1.0.219", features = ["derive"], optional=true }
-
-[features]
-default = ["python", "local_thread_pool", "serde"]
-python = ["dep:pyo3"]
-local_thread_pool = []
-serde = ["dep:serde"]
+serde = { version = "1.0.219", features = ["derive"], optional = true }
 
 [dev-dependencies]
 ciborium = "0.2.2"
 proptest = "1.7.0"
+
+[features]
+default = ["local_thread_pool", "python", "serde"]
+local_thread_pool = []
+python = ["dep:pyo3"]
+serde = ["dep:serde"]

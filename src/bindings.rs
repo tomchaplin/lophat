@@ -1,64 +1,36 @@
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::algorithms::{Decomposition, DecompositionAlgo, LockFreeAlgorithm};
 use crate::columns::Column;
 use crate::columns::VecColumn;
 use crate::options::LoPhatOptions;
-use crate::utils::{anti_transpose, PersistenceDiagram};
+use crate::utils::PersistenceDiagram;
 
-fn compute_pairings_anti_transpose(
-    matrix: &Bound<'_, PyAny>,
-    options: Option<LoPhatOptions>,
-) -> PersistenceDiagram {
-    let matrix_as_vec: Vec<_> =
-        if let Ok(matrix_as_vec) = matrix.extract::<Vec<(usize, Vec<usize>)>>() {
-            matrix_as_vec.into_iter().map(VecColumn::from).collect()
-        } else if let Ok(py_iter) = matrix.try_iter() {
-            py_iter
-                .map(|col| {
-                    col.and_then(|col_ok| col_ok.extract::<(usize, Vec<usize>)>())
-                        .map(VecColumn::from)
-                        .expect("Column is a list of unsigned integers")
-                })
-                .collect()
-        } else {
-            panic!("Could not coerce input matrix into List[List[int]] | Iterator[List[int]]");
-        };
-    let width = matrix_as_vec.len();
-    let at: Vec<_> = anti_transpose(&matrix_as_vec);
-    let dgm = {
-        let matrix = at.into_iter();
-        LockFreeAlgorithm::init(options)
-            .add_cols(matrix)
-            .decompose()
-            .diagram()
-    };
-    dgm.anti_transpose(width)
+fn try_matrix_from_iter(matrix: &Bound<'_, PyAny>) -> PyResult<Vec<VecColumn>> {
+    if let Ok(py_iter) = matrix.try_iter() {
+        let mut matrix_as_vec = Vec::<VecColumn>::new();
+        for col in py_iter {
+            let veccol = col
+                .and_then(|col_ok| col_ok.extract::<(usize, Vec<usize>)>())
+                .map(VecColumn::from)?;
+            matrix_as_vec.push(veccol);
+        }
+        Ok(matrix_as_vec)
+    } else {
+        Err(PyValueError::new_err(()))
+    }
 }
 
-fn compute_pairings_non_transpose(
-    matrix: &Bound<'_, PyAny>,
-    options: Option<LoPhatOptions>,
-) -> PersistenceDiagram {
-    if let Ok(matrix_as_vec) = matrix.extract::<Vec<(usize, Vec<usize>)>>() {
-        let matrix_as_rs_iter = matrix_as_vec.into_iter().map(VecColumn::from);
-        LockFreeAlgorithm::init(options)
-            .add_cols(matrix_as_rs_iter)
-            .decompose()
-            .diagram()
-    } else if let Ok(py_iter) = matrix.try_iter() {
-        let matrix_as_rs_iter = py_iter.map(|col| {
-            col.and_then(|col_ok| col_ok.extract::<(usize, Vec<usize>)>())
-                .map(VecColumn::from)
-                .expect("Column is a list of unsigned integers")
-        });
-        LockFreeAlgorithm::init(options)
-            .add_cols(matrix_as_rs_iter)
-            .decompose()
-            .diagram()
-    } else {
-        panic!("Could not coerce input matrix into List[List[int]] | Iterator[List[int]]");
-    }
+fn try_matrix_as_vec(matrix: &Bound<'_, PyAny>) -> PyResult<Vec<VecColumn>> {
+    matrix
+        .extract::<Vec<(usize, Vec<usize>)>>()
+        .map(|extracted| extracted.into_iter().map(VecColumn::from).collect())
+        .or_else(|_| try_matrix_from_iter(matrix))
+        .map_err(|_| {
+            let message = "Could not coerce input matrix into list[tuple[int, list[int]]] | Iterator[tuple[int, list[int]]]";
+            PyValueError::new_err(message)
+        })
 }
 
 #[pyclass(skip_from_py_object, get_all, set_all, module = "lophat")]
@@ -73,32 +45,22 @@ struct PersistenceDiagramWithReps {
 #[pyo3(signature = (matrix, options=None))]
 fn compute_pairings_with_reps(
     py: Python<'_>,
-    matrix: Bound<'_, PyAny>,
+    matrix: &Bound<'_, PyAny>,
     options: Option<Bound<'_, LoPhatOptions>>,
-) -> PersistenceDiagramWithReps {
+) -> PyResult<PersistenceDiagramWithReps> {
     // Overwrite maintain_v in options
     let options = Some(LoPhatOptions {
         maintain_v: true,
         ..options.map_or(LoPhatOptions::default(), |bound_opt| *bound_opt.borrow())
     });
     // Get all the data from Python into Rust so we can detach
-    let matrix_as_rs_iter: Box<dyn Iterator<Item = VecColumn>>;
-    if let Ok(matrix_as_vec) = matrix.extract::<Vec<(usize, Vec<usize>)>>() {
-        matrix_as_rs_iter = Box::new(matrix_as_vec.into_iter().map(VecColumn::from));
-    } else if let Ok(py_iter) = matrix.try_iter() {
-        matrix_as_rs_iter = Box::new(py_iter.map(|col| {
-            col.and_then(|col_ok| col_ok.extract::<(usize, Vec<usize>)>())
-                .map(VecColumn::from)
-                .expect("Column is a list of unsigned integers")
-        }));
-    } else {
-        panic!("Could not coerce input matrix into list[tuple[int, list[int]]] | Iterator[tuple[int, list[int]]]");
-    };
-    let algo = LockFreeAlgorithm::init(options).add_cols(matrix_as_rs_iter);
+    let matrix_as_vec = try_matrix_as_vec(matrix)?;
 
     // Run R=DV decomposition
     py.detach(|| {
-        let decomposition = algo.decompose();
+        let decomposition = LockFreeAlgorithm::init(options)
+            .add_cols(matrix_as_vec.into_iter())
+            .decompose();
         // Read off diagram and pull out representatives
         let mut diagram = decomposition.diagram();
         let (paired, paired_reps): (Vec<_>, Vec<Vec<_>>) = diagram
@@ -121,27 +83,41 @@ fn compute_pairings_with_reps(
                 )
             })
             .unzip();
-        PersistenceDiagramWithReps {
+        Ok(PersistenceDiagramWithReps {
             paired,
             unpaired,
             paired_reps,
             unpaired_reps,
-        }
+        })
     })
 }
 
 #[pyfunction]
 #[pyo3(signature = (matrix,anti_transpose= true, options=None))]
 fn compute_pairings(
+    py: Python<'_>,
     matrix: &Bound<'_, PyAny>,
     anti_transpose: bool,
     options: Option<&LoPhatOptions>,
-) -> PersistenceDiagram {
-    if anti_transpose {
-        compute_pairings_anti_transpose(matrix, options.copied())
-    } else {
-        compute_pairings_non_transpose(matrix, options.copied())
-    }
+) -> PyResult<PersistenceDiagram> {
+    let matrix_as_vec = try_matrix_as_vec(matrix)?;
+    let algo = LockFreeAlgorithm::init(options.copied());
+    py.detach(|| {
+        if anti_transpose {
+            let width = matrix_as_vec.len();
+            let at: Vec<_> = crate::utils::anti_transpose(&matrix_as_vec);
+            let dgm = {
+                let matrix = at.into_iter();
+                algo.add_cols(matrix).decompose().diagram()
+            };
+            Ok(dgm.anti_transpose(width))
+        } else {
+            Ok(algo
+                .add_cols(matrix_as_vec.into_iter())
+                .decompose()
+                .diagram())
+        }
+    })
 }
 
 // A Python module implemented in Rust.
