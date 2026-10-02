@@ -1,7 +1,15 @@
-import numpy as np
 import pytest
+
+pytest.importorskip(
+    "pytest_benchmark",
+    reason="install the benchmark dependency group",
+    exc_type=ModuleNotFoundError,
+)
+import gudhi
+import numpy as np
 import tadasets
-from gudhi import RipsComplex
+
+RipsComplex = gudhi.RipsComplex
 
 from lophat import LoPhatOptions, compute_pairings
 
