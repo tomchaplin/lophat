@@ -50,6 +50,7 @@ pub struct LockFreeAlgorithm<C: Column + 'static> {
     thread_pool: LoPhatThreadPool,
     max_dim: usize,
 }
+type RVColumnPair<C> = (C, Option<C>);
 
 impl<C: Column + 'static> LockFreeAlgorithm<C> {
     // Returns the value in position [idx] of the pivots array
@@ -76,21 +77,17 @@ impl<C: Column + 'static> LockFreeAlgorithm<C> {
     /// Return a column with index `l`, if one exists.
     /// If found, returns `(col_idx, col)`, where col is a tuple consisting of the corresponding column in R and V.
     /// If not maintaining V, second entry of tuple is `None`.
-    pub fn get_col_with_pivot(&self, l: usize) -> Option<(usize, GuardedRef<(C, Option<C>)>)> {
+    pub fn get_col_with_pivot(&self, l: usize) -> Option<(usize, GuardedRef<RVColumnPair<C>>)> {
         loop {
-            let piv = self.get_pivot(l);
-            if let Some(piv) = piv {
-                let cols = self.matrix[piv].get_ref();
-                if cols.0.pivot() != Some(l) {
-                    // Got a column but it now has the wrong pivot; loop again.
-                    continue;
-                };
-                // Get column with correct pivot, return to caller.
-                return Some((piv, cols));
-            } else {
-                // There is not yet a column with this pivot, inform caller.
-                return None;
-            }
+            // If there is not yet a column with pivot l, inform caller.
+            let piv = self.get_pivot(l)?;
+            let cols = self.matrix[piv].get_ref();
+            if cols.0.pivot() != Some(l) {
+                // Got a column but it now has the wrong pivot; loop again.
+                continue;
+            };
+            // Get column with correct pivot, return to caller.
+            return Some((piv, cols));
         }
     }
 

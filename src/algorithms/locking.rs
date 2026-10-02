@@ -51,6 +51,7 @@ pub struct LockingAlgorithm<C: Column + 'static> {
     max_dim: usize,
 }
 
+type RVColumnPair<C> = (C, Option<C>);
 impl<'a, C: Column> LockingAlgorithm<C> {
     /// Return a column with index `l`, if one exists.
     /// If found, returns `(col_idx, col)`, where col is a tuple consisting of the corresponding column in R and V.
@@ -58,21 +59,17 @@ impl<'a, C: Column> LockingAlgorithm<C> {
     pub fn get_col_with_pivot(
         &'a self,
         l: usize,
-    ) -> Option<(usize, RwLockReadGuard<'a, (C, Option<C>)>)> {
+    ) -> Option<(usize, RwLockReadGuard<'a, RVColumnPair<C>>)> {
         loop {
-            let piv = *self.pivots[l].read().unwrap();
-            if let Some(piv) = piv {
-                let cols = self.matrix[piv].read().unwrap();
-                if cols.0.pivot() != Some(l) {
-                    // Got a column but it now has the wrong pivot; loop again.
-                    continue;
-                };
-                // Get column with correct pivot, return to caller.
-                return Some((piv, cols));
-            } else {
-                // There is not yet a column with this pivot, inform caller.
-                return None;
-            }
+            // If there is not yet a column with pivot l, inform caller.
+            let piv = (*self.pivots[l].read().unwrap())?;
+            let cols = self.matrix[piv].read().unwrap();
+            if cols.0.pivot() != Some(l) {
+                // Got a column but it now has the wrong pivot; loop again.
+                continue;
+            };
+            // Get column with correct pivot, return to caller.
+            return Some((piv, cols));
         }
     }
 
@@ -293,12 +290,18 @@ impl<'a, C> Deref for LockingVRef<'a, C> {
 }
 
 impl<C: Column + 'static> Decomposition<C> for LockingDecomposition<C> {
-    type RColRef<'a> = LockingRRef<'a, C> where Self : 'a;
+    type RColRef<'a>
+        = LockingRRef<'a, C>
+    where
+        Self: 'a;
     fn get_r_col<'a>(&'a self, index: usize) -> Self::RColRef<'a> {
         LockingRRef(self.0[index].read().unwrap())
     }
 
-    type VColRef<'a> = LockingVRef<'a, C> where Self : 'a;
+    type VColRef<'a>
+        = LockingVRef<'a, C>
+    where
+        Self: 'a;
     fn get_v_col<'a>(&'a self, index: usize) -> Result<Self::VColRef<'a>, NoVMatrixError> {
         if self.n_cols() == 0 {
             return Err(NoVMatrixError::EmptyDecompositionError);
