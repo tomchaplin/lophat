@@ -61,7 +61,7 @@ fn compute_pairings_non_transpose(
     }
 }
 
-#[pyclass(get_all, set_all)]
+#[pyclass(skip_from_py_object, get_all, set_all, module = "lophat")]
 struct PersistenceDiagramWithReps {
     paired: Vec<(usize, usize)>,
     unpaired: Vec<usize>,
@@ -148,5 +148,6 @@ fn lophat(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_pairings, m)?)?;
     m.add_function(wrap_pyfunction!(compute_pairings_with_reps, m)?)?;
     m.add_class::<LoPhatOptions>()?;
+    m.add_class::<PersistenceDiagram>()?;
     Ok(())
 }
