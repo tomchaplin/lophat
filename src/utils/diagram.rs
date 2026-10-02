@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-module")]
 use pyo3::prelude::*;
 
 /// Stores the pairings from a matrix decomposition,
 /// as well as those columns which did not appear in a pairing.
-#[cfg_attr(feature = "python", pyclass(module = "lophat", skip_from_py_object, get_all, set_all))]
+#[cfg_attr(feature = "python-module", pyclass(module = "lophat", skip_from_py_object, get_all, set_all))]
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct PersistenceDiagram {
     /// The set of unpaired columns indexes.
@@ -44,7 +44,7 @@ impl std::fmt::Display for PersistenceDiagram {
     }
 }
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-module")]
 #[pymethods]
 impl PersistenceDiagram {
     fn __richcmp__(&self, other: &PersistenceDiagram, cmp_op: pyo3::pyclass::CompareOp) -> bool {

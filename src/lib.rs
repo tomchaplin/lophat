@@ -65,5 +65,5 @@ pub mod columns;
 pub mod options;
 pub mod utils;
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-module")]
 mod bindings;

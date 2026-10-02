@@ -1,12 +1,12 @@
 //! Options for all algorithms.
 //! Soon to be deprecated in favour of an option struct per algorithm.
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-module")]
 use pyo3::prelude::*;
 
 /// A simple struct for specifying options for R=DV decompositions.
 /// Soon to be deprecated in favour of an option struct per algorithm.
-#[cfg_attr(feature = "python", pyclass(module = "lophat", skip_from_py_object, get_all, set_all))]
+#[cfg_attr(feature = "python-module", pyclass(module = "lophat", skip_from_py_object, get_all, set_all))]
 #[derive(Copy, Clone)]
 pub struct LoPhatOptions {
     /// If true, retains V in the R=DV decomposition. Otherwise, nonempty decompositions
@@ -33,7 +33,7 @@ pub struct LoPhatOptions {
     pub clearing: bool,
 }
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-module")]
 #[pymethods]
 impl LoPhatOptions {
     #[new]

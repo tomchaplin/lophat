@@ -28,7 +28,7 @@ ciborium = "0.2.2"
 proptest = "1.7.0"
 
 [features]
-default = ["local_thread_pool", "python", "serde"]
+default = ["local_thread_pool", "python-module", "serde"]
 local_thread_pool = []
-python = ["dep:pyo3"]
+python-module = ["dep:pyo3"]
 serde = ["dep:serde"]

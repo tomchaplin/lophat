@@ -625,7 +625,7 @@ test = [
     { name = "numpy", specifier = ">=2.0" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-benchmark", specifier = ">=5.3.0" },
-    { name = "tadasets", specifier = "~=0.2.1" },
+    { name = "tadasets", specifier = ">=0.2.1" },
 ]
 
 [[package]]
