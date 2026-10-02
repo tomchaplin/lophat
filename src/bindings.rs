@@ -115,7 +115,7 @@ fn compute_pairings(
 }
 
 // A Python module implemented in Rust.
-#[pymodule(gil_used = true)]
+#[pymodule(gil_used = false)]
 fn lophat(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_pairings, m)?)?;
     m.add_function(wrap_pyfunction!(compute_pairings_with_reps, m)?)?;
