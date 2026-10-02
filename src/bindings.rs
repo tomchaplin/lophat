@@ -1,4 +1,3 @@
-use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::algorithms::{Decomposition, DecompositionAlgo, LockFreeAlgorithm};
@@ -7,30 +6,11 @@ use crate::columns::VecColumn;
 use crate::options::LoPhatOptions;
 use crate::utils::PersistenceDiagram;
 
-fn try_matrix_from_iter(matrix: &Bound<'_, PyAny>) -> PyResult<Vec<VecColumn>> {
-    if let Ok(py_iter) = matrix.try_iter() {
-        let mut matrix_as_vec = Vec::<VecColumn>::new();
-        for col in py_iter {
-            let veccol = col
-                .and_then(|col_ok| col_ok.extract::<(usize, Vec<usize>)>())
-                .map(VecColumn::from)?;
-            matrix_as_vec.push(veccol);
-        }
-        Ok(matrix_as_vec)
-    } else {
-        Err(PyValueError::new_err(()))
-    }
-}
-
 fn try_matrix_as_vec(matrix: &Bound<'_, PyAny>) -> PyResult<Vec<VecColumn>> {
     matrix
-        .extract::<Vec<(usize, Vec<usize>)>>()
-        .map(|extracted| extracted.into_iter().map(VecColumn::from).collect())
-        .or_else(|_| try_matrix_from_iter(matrix))
-        .map_err(|_| {
-            let message = "Could not coerce input matrix into list[tuple[int, list[int]]] | Iterator[tuple[int, list[int]]]";
-            PyValueError::new_err(message)
-        })
+        .try_iter()?
+        .map(|col| col?.extract::<(usize, Vec<usize>)>().map(VecColumn::from))
+        .collect()
 }
 
 #[pyclass(skip_from_py_object, get_all, set_all, module = "lophat")]
@@ -107,7 +87,6 @@ fn compute_pairings(
     anti_transpose: bool,
     options: Option<Bound<'_, LoPhatOptions>>,
 ) -> PyResult<PersistenceDiagram> {
-    let matrix_as_vec = try_matrix_as_vec(matrix)?;
     let options = options
         .map(|bound_opt| {
             bound_opt
@@ -115,6 +94,7 @@ fn compute_pairings(
                 .map(|val| *val)
         }) // Option<Result<LoPhatOptions, PyErr>>
         .transpose()?;
+    let matrix_as_vec = try_matrix_as_vec(matrix)?;
     let algo = LockFreeAlgorithm::init(options);
     py.detach(|| {
         if anti_transpose {
