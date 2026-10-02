@@ -51,7 +51,14 @@ fn compute_pairings_with_reps(
     // Overwrite maintain_v in options
     let options = Some(LoPhatOptions {
         maintain_v: true,
-        ..options.map_or(LoPhatOptions::default(), |bound_opt| *bound_opt.borrow())
+        ..options
+            .map(|bound_opt| {
+                bound_opt
+                    .try_borrow() // get PyRef with runtime borrow-checking
+                    .map(|val| *val)
+            }) // Option<Result<LoPhatOptions, PyErr>>
+            .transpose()?
+            .unwrap_or(LoPhatOptions::default())
     });
     // Get all the data from Python into Rust so we can detach
     let matrix_as_vec = try_matrix_as_vec(matrix)?;
@@ -98,10 +105,17 @@ fn compute_pairings(
     py: Python<'_>,
     matrix: &Bound<'_, PyAny>,
     anti_transpose: bool,
-    options: Option<&LoPhatOptions>,
+    options: Option<Bound<'_, LoPhatOptions>>,
 ) -> PyResult<PersistenceDiagram> {
     let matrix_as_vec = try_matrix_as_vec(matrix)?;
-    let algo = LockFreeAlgorithm::init(options.copied());
+    let options = options
+        .map(|bound_opt| {
+            bound_opt
+                .try_borrow() // get PyRef with runtime borrow-checking
+                .map(|val| *val)
+        }) // Option<Result<LoPhatOptions, PyErr>>
+        .transpose()?;
+    let algo = LockFreeAlgorithm::init(options);
     py.detach(|| {
         if anti_transpose {
             let width = matrix_as_vec.len();
