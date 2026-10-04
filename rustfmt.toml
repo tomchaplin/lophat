@@ -1,0 +1,29 @@
+edition = "2024"
+max_width = 100
+combine_control_expr = false
+condense_wildcard_suffixes = true
+enum_discrim_align_threshold = 30
+chain_width = 60
+
+fn_single_line = true
+force_multiline_blocks = true
+format_code_in_doc_comments = true
+format_macro_matchers = true
+# Preserve Python docstring indentation; Rust documentation is not skipped.
+skip_macro_invocations = ["python_doc"]
+format_strings = true
+group_imports = "StdExternalCrate"
+hard_tabs = true
+imports_granularity = "Crate"
+imports_indent = "Block"
+imports_layout = "HorizontalVertical"
+indent_style = "Block"
+match_block_trailing_comma = true
+reorder_impl_items = true
+style_edition = "2024"
+tab_spaces = 4
+unstable_features = true
+use_field_init_shorthand = true
+
+comment_width = 80
+wrap_comments = true

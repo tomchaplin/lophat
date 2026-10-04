@@ -1,365 +1,438 @@
-#[cfg(feature = "serde")]
-use crate::impl_rvd_serialize;
+use std::{
+	ops::Deref,
+	sync::{RwLock, RwLockReadGuard},
+};
 
-use std::ops::Deref;
-use std::sync::RwLock;
-use std::sync::RwLockReadGuard;
-
-use crate::algorithms::Decomposition;
-use crate::columns::Column;
-use crate::columns::ColumnMode::{Storage, Working};
-use crate::options::LoPhatOptions;
-use crate::utils::set_mode_of_pair;
-
-use rayon::prelude::*;
 #[cfg(feature = "local_thread_pool")]
 use rayon::ThreadPoolBuilder;
+use rayon::prelude::*;
 
-use super::DecompositionAlgo;
-use super::NoVMatrixError;
+use super::{DecompositionAlgo, NoVMatrixError};
+#[cfg(feature = "serde")]
+use crate::impl_rvd_serialize;
+use crate::{
+	algorithms::Decomposition,
+	columns::{
+		Column,
+		ColumnMode::{Storage, Working},
+	},
+	options::LoPhatOptions,
+	utils::set_mode_of_pair,
+};
 
 enum LoPhatThreadPool {
-    #[cfg(not(feature = "local_thread_pool"))]
-    Global(),
-    #[cfg(feature = "local_thread_pool")]
-    Local(rayon::ThreadPool),
+	#[cfg(not(feature = "local_thread_pool"))]
+	Global(),
+	#[cfg(feature = "local_thread_pool")]
+	Local(rayon::ThreadPool),
 }
 
 impl LoPhatThreadPool {
-    fn install<OP, R>(&self, op: OP) -> R
-    where
-        OP: FnOnce() -> R + Send,
-        R: Send,
-    {
-        match self {
-            #[cfg(not(feature = "local_thread_pool"))]
-            LoPhatThreadPool::Global() => op(),
-            #[cfg(feature = "local_thread_pool")]
-            LoPhatThreadPool::Local(pool) => pool.install(op),
-        }
-    }
+	fn install<OP, R>(&self, op: OP) -> R
+	where
+		OP: FnOnce() -> R + Send,
+		R: Send,
+	{
+		match self {
+			#[cfg(not(feature = "local_thread_pool"))]
+			LoPhatThreadPool::Global() => op(),
+			#[cfg(feature = "local_thread_pool")]
+			LoPhatThreadPool::Local(pool) => pool.install(op),
+		}
+	}
 }
 
-/// Implements a locking version of the parallel, lockfree algorithm introduced by [Morozov and Nigmetov](https://doi.org/10.1145/3350755.3400244).
-/// Rather than using atomic pointers to store columns, each column is stored behind a [`RwLock`](std::sync::RwLock).
-/// Also able to employ the clearing optimisation of [Bauer et al.](https://doi.org/10.1007/978-3-319-04099-8_7).
+/// Parallel matrix reduction using read/write locks guarding each column pair.
+///
+/// Implements the algorithm of [Morozov and Nigmetov](https://doi.org/10.1145/3350755.3400244)
+/// with locking column publication and the clearing optimization of
+/// [Bauer et al.](https://doi.org/10.1007/978-3-319-04099-8_7).
+///
+/// Use [`DecompositionAlgo::init`], [`DecompositionAlgo::add_cols`], and
+/// [`DecompositionAlgo::decompose`] as the public construction workflow. The
+/// algorithm uses [`LoPhatOptions`] and is generic over the [`Column`] storage.
+/// Clearing requires a square boundary matrix with `D * D = 0` and correct
+/// chain degrees. For general or rectangular matrices, disable clearing and
+/// supply an appropriate `column_height`. Mathematical requirements are not
+/// validated.
+///
+/// The inherent reduction methods are low-level operations used during the
+/// consuming decomposition workflow. Their pivot table is initialized by
+/// `decompose`, not by `init` or `add_cols`.
 pub struct LockingAlgorithm<C: Column + 'static> {
-    matrix: Vec<RwLock<(C, Option<C>)>>,
-    pivots: Vec<RwLock<Option<usize>>>,
-    options: LoPhatOptions,
-    thread_pool: LoPhatThreadPool,
-    max_dim: usize,
+	matrix: Vec<RwLock<(C, Option<C>)>>,
+	pivots: Vec<RwLock<Option<usize>>>,
+	options: LoPhatOptions,
+	thread_pool: LoPhatThreadPool,
+	max_dim: usize,
 }
 
 type RVColumnPair<C> = (C, Option<C>);
 impl<'a, C: Column> LockingAlgorithm<C> {
-    /// Return a column with index `l`, if one exists.
-    /// If found, returns `(col_idx, col)`, where col is a tuple consisting of the corresponding column in R and V.
-    /// If not maintaining V, second entry of tuple is `None`.
-    pub fn get_col_with_pivot(
-        &'a self,
-        l: usize,
-    ) -> Option<(usize, RwLockReadGuard<'a, RVColumnPair<C>>)> {
-        loop {
-            // If there is not yet a column with pivot l, inform caller.
-            let piv = (*self.pivots[l].read().unwrap())?;
-            let cols = self.matrix[piv].read().unwrap();
-            if cols.0.pivot() != Some(l) {
-                // Got a column but it now has the wrong pivot; loop again.
-                continue;
-            };
-            // Get column with correct pivot, return to caller.
-            return Some((piv, cols));
-        }
-    }
+	/// Borrow a published column whose greatest nonzero row is `l`.
+	///
+	/// Returns the column index and a guard over `(r_column,
+	/// optional_v_column)`. The second column is absent when `maintain_v`
+	/// is disabled. Returns `None` if no pivot has been published for row
+	/// `l`; publication may change while other threads reduce the matrix.
+	/// The guard keeps its column data accessible.
+	///
+	/// # Panics
+	///
+	/// Panics if `l` is outside the initialized pivot table. This table is set
+	/// up inside [`DecompositionAlgo::decompose`], so this is a low-level
+	/// operation rather than a query on a newly created builder.
+	pub fn get_col_with_pivot(
+		&'a self,
+		l: usize,
+	) -> Option<(usize, RwLockReadGuard<'a, RVColumnPair<C>>)> {
+		loop {
+			// If there is not yet a column with pivot l, inform caller.
+			let piv = (*self.pivots[l].read().unwrap())?;
+			let cols = self.matrix[piv].read().unwrap();
+			if cols.0.pivot() != Some(l) {
+				// Got a column but it now has the wrong pivot; loop again.
+				continue;
+			};
+			// Get column with correct pivot, return to caller.
+			return Some((piv, cols));
+		}
+	}
 
-    /// Reduces the `j`th column of the matrix as far as possible.
-    /// If a pivot is found to the right of `j` (e.g. redued by another thread)
-    /// then will switch to reducing that column.
-    /// It is safe to reduce all columns in parallel.
-    pub fn reduce_column(&self, j: usize) {
-        let mut working_j = j;
-        'outer: loop {
-            // We make a copy of the column because we want to mutate our local copy
-            // without locking other threads from reading
-            let mut curr_column = self.matrix[working_j].read().unwrap().clone();
-            set_mode_of_pair(&mut curr_column, Working);
-            while let Some(l) = curr_column.0.pivot() {
-                let piv_with_column_opt = self.get_col_with_pivot(l);
-                if let Some((piv, piv_column)) = piv_with_column_opt {
-                    // Lines 17-24
-                    if piv < working_j {
-                        curr_column.0.add_col(&piv_column.0);
-                        // Only add V columns if we need to
-                        if self.options.maintain_v {
-                            let curr_v_col = curr_column.1.as_mut().unwrap();
-                            curr_v_col.add_col(piv_column.1.as_ref().unwrap());
-                        }
-                    } else if piv > working_j {
-                        self.write_to_matrix(working_j, curr_column);
-                        let mut pivot_lock = self.pivots[l].write().unwrap();
-                        if *pivot_lock == Some(piv) {
-                            *pivot_lock = Some(working_j);
-                            working_j = piv
-                        }
-                        continue 'outer;
-                    } else {
-                        panic!()
-                    }
-                } else {
-                    // piv = -1 case
-                    self.write_to_matrix(working_j, curr_column);
-                    let mut pivot_lock = self.pivots[l].write().unwrap();
-                    if (*pivot_lock).is_none() {
-                        *pivot_lock = Some(working_j);
-                        return;
-                    } else {
-                        continue 'outer;
-                    }
-                }
-            }
-            // Lines 25-27 (curr_column = 0 clause)
-            if curr_column.0.is_cycle() {
-                self.write_to_matrix(working_j, curr_column);
-                return;
-            }
-        }
-    }
+	/// Reduce column `j`, publishing changes to the matrix and pivot table.
+	///
+	/// If a competing pivot owner lies to the right of the working column, the
+	/// operation can continue by reducing that displaced column. The algorithm
+	/// calls this operation concurrently for distinct columns during reduction.
+	///
+	/// # Panics
+	///
+	/// Panics for an invalid column index or a pivot outside the initialized
+	/// table. Calling it with an already published pivot owned by the same
+	/// column can also panic. The pivot table must have been initialized by
+	/// the decomposition workflow; this is not a standalone reduction entry
+	/// point.
+	pub fn reduce_column(&self, j: usize) {
+		let mut working_j = j;
+		'outer: loop {
+			// We make a copy of the column because we want to mutate our local
+			// copy without locking other threads from reading
+			let mut curr_column = self.matrix[working_j].read().unwrap().clone();
+			set_mode_of_pair(&mut curr_column, Working);
+			while let Some(l) = curr_column.0.pivot() {
+				let piv_with_column_opt = self.get_col_with_pivot(l);
+				if let Some((piv, piv_column)) = piv_with_column_opt {
+					// Lines 17-24
+					if piv < working_j {
+						curr_column.0.add_col(&piv_column.0);
+						// Only add V columns if we need to
+						if self.options.maintain_v {
+							let curr_v_col = curr_column.1.as_mut().unwrap();
+							curr_v_col.add_col(piv_column.1.as_ref().unwrap());
+						}
+					} else if piv > working_j {
+						self.write_to_matrix(working_j, curr_column);
+						let mut pivot_lock = self.pivots[l].write().unwrap();
+						if *pivot_lock == Some(piv) {
+							*pivot_lock = Some(working_j);
+							working_j = piv
+						}
+						continue 'outer;
+					} else {
+						panic!()
+					}
+				} else {
+					// piv = -1 case
+					self.write_to_matrix(working_j, curr_column);
+					let mut pivot_lock = self.pivots[l].write().unwrap();
+					if (*pivot_lock).is_none() {
+						*pivot_lock = Some(working_j);
+						return;
+					} else {
+						continue 'outer;
+					}
+				}
+			}
+			// Lines 25-27 (curr_column = 0 clause)
+			if curr_column.0.is_cycle() {
+				self.write_to_matrix(working_j, curr_column);
+				return;
+			}
+		}
+	}
 
-    // Write to matrix; might lock until no read locks present
-    // Make sure write lock is dropped quickly
-    fn write_to_matrix(&self, index: usize, mut to_write: (C, Option<C>)) {
-        set_mode_of_pair(&mut to_write, Storage);
-        let mut in_matrix = self.matrix[index].write().unwrap();
-        *in_matrix = to_write;
-    }
+	// Write to matrix; might lock until no read locks present
+	// Make sure write lock is dropped quickly
+	fn write_to_matrix(&self, index: usize, mut to_write: (C, Option<C>)) {
+		set_mode_of_pair(&mut to_write, Storage);
+		let mut in_matrix = self.matrix[index].write().unwrap();
+		*in_matrix = to_write;
+	}
 
-    /// Uses the boundary built up in column `boudary_idx` to clear the column corresponding to its pivot
-    pub fn clear_with_column(&self, boudary_idx: usize) {
-        let boundary = self.matrix[boudary_idx].read().unwrap();
-        let boundary_r = &boundary.0;
-        let clearing_idx = boundary_r
-            .pivot()
-            .expect("Attempted to clear using cycle column");
-        let clearing_degree = self.matrix[clearing_idx].read().unwrap().0.degree();
-        // The cleared R column is empty
-        let r_col = C::new_with_degree(clearing_degree);
-        // The corresponding V column should be the R column of the boundary
-        let v_col = self.options.maintain_v.then(|| {
-            let mut br = boundary_r.clone();
-            br.set_degree(clearing_degree);
-            br
-        });
-        self.write_to_matrix(clearing_idx, (r_col, v_col));
-    }
+	/// Clear the pivot column of a nonzero reduced boundary column.
+	///
+	/// `boudary_idx` identifies the boundary column in R. Its pivot determines
+	/// the column to clear. If V is retained, that V column is replaced
+	/// with the boundary's R column, relabelled with the cleared column's
+	/// degree. Requires the clearing invariants of a square chain-complex
+	/// boundary matrix.
+	///
+	/// # Panics
+	///
+	/// Panics if the boundary index or pivot column index is out of range, or
+	/// if the boundary column is zero. Use only after reducing the boundary
+	/// column.
+	pub fn clear_with_column(&self, boudary_idx: usize) {
+		let boundary = self.matrix[boudary_idx].read().unwrap();
+		let boundary_r = &boundary.0;
+		let clearing_idx = boundary_r
+			.pivot()
+			.expect("Attempted to clear using cycle column");
+		let clearing_degree = self.matrix[clearing_idx].read().unwrap().0.degree();
+		// The cleared R column is empty
+		let r_col = C::new_with_degree(clearing_degree);
+		// The corresponding V column should be the R column of the boundary
+		let v_col = self.options.maintain_v.then(|| {
+			let mut br = boundary_r.clone();
+			br.set_degree(clearing_degree);
+			br
+		});
+		self.write_to_matrix(clearing_idx, (r_col, v_col));
+	}
 
-    /// Reduce all columns of given degree in parallel, according to `options`.
-    pub fn reduce_in_degree(&self, degree: usize) {
-        // Reduce matrix for columns of that degree
-        self.thread_pool.install(|| {
-            (0..self.matrix.len())
-                .into_par_iter()
-                .with_min_len(self.options.min_chunk_len)
-                .filter(|&j| self.matrix[j].read().unwrap().0.degree() == degree)
-                .for_each(|j| self.reduce_column(j));
-        });
-    }
+	/// Reduce all columns carrying the given chain degree in parallel.
+	///
+	/// Uses the configured Rayon pool and `min_chunk_len`. Called by the
+	/// consuming decomposition workflow after initializing its pivot table.
+	/// Inherits the preconditions and panic behavior of
+	/// [`Self::reduce_column`].
+	pub fn reduce_in_degree(&self, degree: usize) {
+		// Reduce matrix for columns of that degree
+		self.thread_pool.install(|| {
+			(0..self.matrix.len())
+				.into_par_iter()
+				.with_min_len(self.options.min_chunk_len)
+				.filter(|&j| self.matrix[j].read().unwrap().0.degree() == degree)
+				.for_each(|j| self.reduce_column(j));
+		});
+	}
 
-    /// Clear all columns of given degree in parallel
-    pub fn clear_in_degree(&self, degree: usize) {
-        // Reduce matrix for columns of that degree
-        self.thread_pool.install(|| {
-            (0..self.matrix.len())
-                .into_par_iter()
-                .with_min_len(self.options.min_chunk_len)
-                .filter(|&j| self.matrix[j].read().unwrap().0.degree() == degree)
-                .filter(|&j| self.matrix[j].read().unwrap().0.is_boundary())
-                .for_each(|j| self.clear_with_column(j));
-        });
-    }
+	/// Use nonzero R columns of the given degree to clear their pivot columns.
+	///
+	/// Runs in parallel with the configured pool and `min_chunk_len`. Those
+	/// boundary columns must already have been reduced, and clearing requires a
+	/// valid square chain-complex boundary matrix. Inherits the panic behavior
+	/// of [`Self::clear_with_column`].
+	pub fn clear_in_degree(&self, degree: usize) {
+		// Reduce matrix for columns of that degree
+		self.thread_pool.install(|| {
+			(0..self.matrix.len())
+				.into_par_iter()
+				.with_min_len(self.options.min_chunk_len)
+				.filter(|&j| self.matrix[j].read().unwrap().0.degree() == degree)
+				.filter(|&j| self.matrix[j].read().unwrap().0.is_boundary())
+				.for_each(|j| self.clear_with_column(j));
+		});
+	}
 
-    /// Reduce all columns in parallel, according to `options`.
-    pub fn reduce(&self) {
-        for degree in (0..=self.max_dim).rev() {
-            self.reduce_in_degree(degree);
-            if self.options.clearing && degree > 0 {
-                self.clear_in_degree(degree)
-            }
-        }
-    }
+	/// Reduce every chain degree in descending order, optionally clearing
+	/// pivots.
+	///
+	/// This low-level operation expects an already initialized pivot table and
+	/// valid reduction state. For normal use, call
+	/// [`DecompositionAlgo::decompose`], which initializes that table and
+	/// consumes the builder. Uses the configured thread pool and inherits
+	/// the reduction and clearing preconditions.
+	pub fn reduce(&self) {
+		for degree in (0..=self.max_dim).rev() {
+			self.reduce_in_degree(degree);
+			if self.options.clearing && degree > 0 {
+				self.clear_in_degree(degree)
+			}
+		}
+	}
 }
 
 impl<C: Column> DecompositionAlgo<C> for LockingAlgorithm<C> {
-    type Options = LoPhatOptions;
+	type Decomposition = LockingDecomposition<C>;
+	type Options = LoPhatOptions;
 
-    fn init(options: Option<Self::Options>) -> Self {
-        let options = options.unwrap_or_default();
-        // Setup thread pool
-        #[cfg(feature = "local_thread_pool")]
-        let thread_pool = LoPhatThreadPool::Local(
-            ThreadPoolBuilder::new()
-                .num_threads(options.num_threads)
-                .build()
-                .expect("Failed to build thread pool"),
-        );
-        #[cfg(not(feature = "local_thread_pool"))]
-        let thread_pool = {
-            if options.num_threads != 0 {
-                panic!(
-                    "To specify a number of threads, please enable the local_thread_pool feature"
-                );
-            }
-            LoPhatThreadPool::Global()
-        };
-        Self {
-            matrix: vec![],
-            pivots: vec![],
-            options,
-            thread_pool,
-            max_dim: 0,
-        }
-    }
+	fn init(options: Option<Self::Options>) -> Self {
+		let options = options.unwrap_or_default();
+		// Setup thread pool
+		#[cfg(feature = "local_thread_pool")]
+		let thread_pool = LoPhatThreadPool::Local(
+			ThreadPoolBuilder::new()
+				.num_threads(options.num_threads)
+				.build()
+				.expect("Failed to build thread pool"),
+		);
+		#[cfg(not(feature = "local_thread_pool"))]
+		let thread_pool = {
+			if options.num_threads != 0 {
+				panic!(
+					"To specify a number of threads, please enable the local_thread_pool feature"
+				);
+			}
+			LoPhatThreadPool::Global()
+		};
+		Self {
+			matrix: vec![],
+			pivots: vec![],
+			options,
+			thread_pool,
+			max_dim: 0,
+		}
+	}
 
-    fn add_cols(mut self, cols: impl Iterator<Item = C>) -> Self {
-        let first_idx = self.matrix.len();
-        let new_cols = cols.enumerate().map(|(idx, r_col)| {
-            self.max_dim = self.max_dim.max(r_col.degree());
-            if self.options.maintain_v {
-                let mut v_col = C::new_with_degree(r_col.degree());
-                v_col.add_entry(first_idx + idx);
-                RwLock::new((r_col, Some(v_col)))
-            } else {
-                RwLock::new((r_col, None))
-            }
-        });
-        self.matrix.extend(new_cols);
-        self
-    }
+	fn add_cols(mut self, cols: impl Iterator<Item = C>) -> Self {
+		let first_idx = self.matrix.len();
+		let new_cols = cols.enumerate().map(|(idx, r_col)| {
+			self.max_dim = self.max_dim.max(r_col.degree());
+			if self.options.maintain_v {
+				let mut v_col = C::new_with_degree(r_col.degree());
+				v_col.add_entry(first_idx + idx);
+				RwLock::new((r_col, Some(v_col)))
+			} else {
+				RwLock::new((r_col, None))
+			}
+		});
+		self.matrix.extend(new_cols);
+		self
+	}
 
-    fn add_entries(self, entries: impl Iterator<Item = (usize, usize)>) -> Self {
-        for (row, col) in entries {
-            let mut col = self
-                .matrix
-                .get(col)
-                .expect("Column index should correspond to a pre-existing column")
-                .write()
-                .expect("Can eventually get write guard on column");
-            col.0.add_entry(row);
-        }
-        self
-    }
+	fn add_entries(self, entries: impl Iterator<Item = (usize, usize)>) -> Self {
+		for (row, col) in entries {
+			let mut col = self
+				.matrix
+				.get(col)
+				.expect("Column index should correspond to a pre-existing column")
+				.write()
+				.expect("Can eventually get write guard on column");
+			col.0.add_entry(row);
+		}
+		self
+	}
 
-    type Decomposition = LockingDecomposition<C>;
-
-    fn decompose(mut self) -> Self::Decomposition {
-        // Setup pivots vector
-        let column_height = self.options.column_height.unwrap_or(self.matrix.len());
-        self.pivots = (0..column_height).map(|_| RwLock::new(None)).collect();
-        // Decompose
-        for degree in (0..=self.max_dim).rev() {
-            self.reduce_in_degree(degree);
-            if self.options.clearing && degree > 0 {
-                self.clear_in_degree(degree)
-            }
-        }
-        LockingDecomposition(self.matrix)
-    }
+	fn decompose(mut self) -> Self::Decomposition {
+		// Setup pivots vector
+		let column_height = self.options.column_height.unwrap_or(self.matrix.len());
+		self.pivots = (0..column_height).map(|_| RwLock::new(None)).collect();
+		// Decompose
+		for degree in (0..=self.max_dim).rev() {
+			self.reduce_in_degree(degree);
+			if self.options.clearing && degree > 0 {
+				self.clear_in_degree(degree)
+			}
+		}
+		LockingDecomposition(self.matrix)
+	}
 }
 
-/// Return type of [`LockingAlgorithm`].
+/// Reduced R and optional V columns produced by [`LockingAlgorithm`].
+///
+/// Use the [`Decomposition`] methods to borrow columns or compute a persistence
+/// diagram. The decomposition includes zero columns in its column count. Empty
+/// decompositions report [`NoVMatrixError::EmptyDecompositionError`] when V is
+/// queried, regardless of the original options.
+///
+/// With the `serde` feature, serialization uses the common
+/// `DecompositionFileFormat` representation in [`crate::utils`].
 pub struct LockingDecomposition<C: Column + 'static>(Vec<RwLock<(C, Option<C>)>>);
 
+/// Immutable guard dereferencing to a R column in a [`LockingDecomposition`].
+///
+/// Returned by [`Decomposition::get_r_col`]. Keeps the underlying
+/// read lock alive for the duration of the borrow.
 pub struct LockingRRef<'a, C>(RwLockReadGuard<'a, (C, Option<C>)>);
 
 impl<'a, C> Deref for LockingRRef<'a, C> {
-    type Target = C;
+	type Target = C;
 
-    fn deref(&self) -> &Self::Target {
-        &self.0.deref().0
-    }
+	fn deref(&self) -> &Self::Target { &self.0.deref().0 }
 }
 
+/// Immutable guard dereferencing to a V column in a [`LockingDecomposition`].
+///
+/// Returned by [`Decomposition::get_v_col`]. Keeps the underlying
+/// read lock alive for the duration of the borrow.
 pub struct LockingVRef<'a, C>(RwLockReadGuard<'a, (C, Option<C>)>);
 
 impl<'a, C> Deref for LockingVRef<'a, C> {
-    type Target = C;
+	type Target = C;
 
-    fn deref(&self) -> &Self::Target {
-        self.0.deref().1.as_ref().unwrap()
-    }
+	fn deref(&self) -> &Self::Target { self.0.deref().1.as_ref().unwrap() }
 }
 
 impl<C: Column + 'static> Decomposition<C> for LockingDecomposition<C> {
-    type RColRef<'a>
-        = LockingRRef<'a, C>
-    where
-        Self: 'a;
-    fn get_r_col<'a>(&'a self, index: usize) -> Self::RColRef<'a> {
-        LockingRRef(self.0[index].read().unwrap())
-    }
+	type RColRef<'a>
+		= LockingRRef<'a, C>
+	where
+		Self: 'a;
+	type VColRef<'a>
+		= LockingVRef<'a, C>
+	where
+		Self: 'a;
 
-    type VColRef<'a>
-        = LockingVRef<'a, C>
-    where
-        Self: 'a;
-    fn get_v_col<'a>(&'a self, index: usize) -> Result<Self::VColRef<'a>, NoVMatrixError> {
-        if self.n_cols() == 0 {
-            return Err(NoVMatrixError::EmptyDecompositionError);
-        }
-        let col_ref = self.0[index].read().unwrap();
-        let has_v = col_ref.1.is_some();
-        if has_v {
-            Ok(LockingVRef(col_ref))
-        } else {
-            Err(NoVMatrixError::VMatrixDiscardedError)
-        }
-    }
+	fn get_r_col<'a>(&'a self, index: usize) -> Self::RColRef<'a> {
+		LockingRRef(self.0[index].read().unwrap())
+	}
 
-    fn n_cols(&self) -> usize {
-        self.0.len()
-    }
+	fn get_v_col<'a>(&'a self, index: usize) -> Result<Self::VColRef<'a>, NoVMatrixError> {
+		if self.n_cols() == 0 {
+			return Err(NoVMatrixError::EmptyDecompositionError);
+		}
+		let col_ref = self.0[index].read().unwrap();
+		let has_v = col_ref.1.is_some();
+		if has_v {
+			Ok(LockingVRef(col_ref))
+		} else {
+			Err(NoVMatrixError::VMatrixDiscardedError)
+		}
+	}
+
+	fn n_cols(&self) -> usize { self.0.len() }
 }
 
 #[cfg(test)]
 mod tests {
 
-    use super::*;
-    use crate::algorithms::SerialAlgorithm;
-    use crate::columns::VecColumn;
-    use proptest::collection::hash_set;
-    use proptest::prelude::*;
+	use proptest::{collection::hash_set, prelude::*};
 
-    proptest! {
-        #[test]
-        fn locking_agrees_with_serial( matrix in sut_matrix(100) ) {
-            let options = LoPhatOptions::default();
-            let serial_dgm = SerialAlgorithm::init(Some(options)).add_cols(matrix.iter().cloned()).decompose().diagram();
-            let parallel_dgm = LockingAlgorithm::init(Some(options)).add_cols(matrix.into_iter()).decompose().diagram();
-            assert_eq!(serial_dgm, parallel_dgm);
-        }
-    }
+	use super::*;
+	use crate::{algorithms::SerialAlgorithm, columns::VecColumn};
 
-    // Generates a strict upper triangular matrix of VecColumns with given size
-    fn sut_matrix(size: usize) -> impl Strategy<Value = Vec<VecColumn>> {
-        let mut matrix = vec![];
-        for i in 1..size {
-            matrix.push(veccolum_with_idxs_below(i));
-        }
-        matrix
-    }
+	proptest! {
+		#[test]
+		fn locking_agrees_with_serial( matrix in sut_matrix(100) ) {
+			let options = LoPhatOptions::default();
+			let serial_dgm = SerialAlgorithm::init(Some(options)).add_cols(matrix.iter().cloned()).decompose().diagram();
+			let parallel_dgm = LockingAlgorithm::init(Some(options)).add_cols(matrix.into_iter()).decompose().diagram();
+			assert_eq!(serial_dgm, parallel_dgm);
+		}
+	}
 
-    fn veccolum_with_idxs_below(mut max_idx: usize) -> impl Strategy<Value = VecColumn> {
-        // Avoid empty range problem
-        // Always returns empty Vec because size is in 0..1 == { 0 }
-        if max_idx == 0 {
-            max_idx = 1;
-        }
-        hash_set(0..max_idx, 0..max_idx).prop_map(|set| {
-            let mut col: Vec<_> = set.into_iter().collect();
-            col.sort();
-            VecColumn::from((0, col))
-        })
-    }
+	// Generates a strict upper triangular matrix of VecColumns with given size
+	fn sut_matrix(size: usize) -> impl Strategy<Value = Vec<VecColumn>> {
+		let mut matrix = vec![];
+		for i in 1..size {
+			matrix.push(veccolum_with_idxs_below(i));
+		}
+		matrix
+	}
+
+	fn veccolum_with_idxs_below(mut max_idx: usize) -> impl Strategy<Value = VecColumn> {
+		// Avoid empty range problem
+		// Always returns empty Vec because size is in 0..1 == { 0 }
+		if max_idx == 0 {
+			max_idx = 1;
+		}
+		hash_set(0..max_idx, 0..max_idx).prop_map(|set| {
+			let mut col: Vec<_> = set.into_iter().collect();
+			col.sort();
+			VecColumn::from((0, col))
+		})
+	}
 }
 
 #[cfg(feature = "serde")]

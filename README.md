@@ -53,12 +53,35 @@ To force installing from binary run
 ```shell
 pip install --only-binary lophat lophat
 ```
-This provides you with one function, `compute_pairings`, which returns the diagram as a set of paired columns and a set of unpaired columns.
-By default, this uses all available threads and the lockfree algorithm of [[1]](#1).
-To use serial algorithm or limit number of threads, additionally provide a `LoPhatOptions` object.
+`compute_pairings` returns a diagram containing a set of paired column indices and a set of unpaired indices.
+`compute_pairings_with_reps` also returns representative cycles, expressed as lists of nonzero input basis indices over the field with two elements.
+Both functions use the lockfree algorithm of [[1]](#1).
+Pass a `LoPhatOptions` object to configure the worker count, clearing, and other options; `num_threads=1` runs the same algorithm with one worker.
 
 For more details, please consult [the Python docs](https://lophat.readthedocs.io/en/latest/).
-For example usage, see the file `example.py` or [this Google colab notebook](https://colab.research.google.com/drive/1y0_wZfvuUZfRreYPO50mo4rBlflkMcfj?usp=sharing).
+For example usage, see `examples/main.py` or [this Google colab notebook](https://colab.research.google.com/drive/1y0_wZfvuUZfRreYPO50mo4rBlflkMcfj?usp=sharing).
+
+## Building documentation and type stubs
+
+With a virtual environment active and Maturin 1.15 or newer installed, build the extension and generate its type stubs with:
+
+```shell
+maturin develop --generate-stubs
+```
+
+For distributable wheels, use `maturin build --generate-stubs`. The release workflow supplies this flag automatically. Generated `.pyi` files are build artifacts; do not maintain a separate handwritten stub.
+
+Rust APIs use ordinary inline Markdown doc comments (`///`), which rustfmt formats, including code examples. Shared APIs supply Python documentation through `#[doc = python_doc!(r#"Python reStructuredText"#)]` attributes; rustfmt skips these macro invocations to preserve their indentation.
+
+Before PyO3 processes a shared class, `#[pymethods]` block, or inline Python module, a conditional `macro_rules_apply(strip_rust_docs!)` pass removes Rust doc comments, including those on fields and methods. Both the adapter alias and the stripping macro live in `src/utils/mod.rs`; the adapter comes from the optional `macro_rules_attribute` dependency. The stripping pass is disabled for Rustdoc, local rust-analyzer analysis, and builds without `python-module`. In those contexts, `python_doc!` expands to an empty string. Extension builds retain the Python documentation for runtime docstrings and generated stubs. The recursive stripping macro uses a crate recursion limit of 1024.
+
+Build the Rust reference with `cargo doc --no-deps`. After installing Sphinx and `sphinx-rtd-theme` in the same Python environment as the extension, build the Python reference with:
+
+```shell
+python -m sphinx -W -b html docs docs/_build/html
+```
+
+Sphinx reads the installed extension's docstrings, so rebuild the extension after editing them.
 
 ## TODO
 
@@ -98,4 +121,3 @@ Web. [doi:10.11578/dc.20210407.1](https://doi.org/10.11578/dc.20210407.1). [GitH
 "Clear and compress: Computing persistent homology in chunks."
 Topological Methods in Data Analysis and Visualization III: Theory, Algorithms, and Applications.
 Springer International Publishing, 2014.
-
