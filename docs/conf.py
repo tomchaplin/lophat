@@ -9,8 +9,8 @@ from importlib.metadata import version as package_version
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "LoPHAT"
-copyright = "2023, Thomas Chaplin"
-author = "Thomas Chaplin"
+copyright = "2023, Thomas Chaplin; 2026, Abhinav Natarajan"
+author = "Thomas Chaplin, Abhinav Natarajan"
 release = package_version("lophat")
 
 # -- General configuration ---------------------------------------------------
