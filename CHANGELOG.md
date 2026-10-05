@@ -99,4 +99,7 @@ Changes since 0.11.0.
   published releases targeting `main`, upload the tested wheels and publish to
   PyPI only after all builds and tests succeed.
 - Configure locked release builds and stub generation in `pyproject.toml`.
+- Add a Rust release workflow that tests and publishes the crate to crates.io
+  when a release targeting `main` is published. Correct the crate keywords to
+  satisfy crates.io's character and length requirements.
 - Add Abhinav Natarajan to the license and documentation author credits.

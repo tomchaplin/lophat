@@ -7,12 +7,7 @@ readme = "README.md"
 homepage = "https://github.com/tomchaplin/lophat"
 repository = "https://github.com/tomchaplin/lophat"
 license = "MIT"
-keywords = [
-	"filtered chain complex",
-	"persistence module",
-	"persistent homology",
-	"topological data analysis"
-]
+keywords = ["chain-complex", "persistence-module", "persistent-homology", "tda", "topology"]
 categories = ["mathematics", "science"]
 exclude = ["docs/**/*", "scripts/**/*"]
 

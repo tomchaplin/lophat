@@ -91,6 +91,12 @@ python -m sphinx -W -b html docs docs/_build/html
 
 Sphinx reads the installed extension's docstrings, so rebuild the extension after editing them.
 
+## Publishing Rust releases
+
+The `Rust crate` GitHub Actions workflow publishes to crates.io when a GitHub release is published with `main` as its target. It checks out the release tag and runs Rust unit tests and doctests before publishing the version recorded in `Cargo.toml`. Update that version before creating the release tag.
+
+Configure the repository secret `CARGO_REGISTRY_TOKEN` with a crates.io API token authorized to publish `lophat`. The token is supplied only to the publishing step. Tests and package verification enable `local_thread_pool` and `serde` without requiring Python; the crate's published default features are unchanged.
+
 ## TODO
 
 - [ ] Change options struct for each algorithm
