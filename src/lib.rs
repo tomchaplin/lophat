@@ -95,6 +95,6 @@ pub mod columns;
 pub mod options;
 pub mod utils;
 
-#[cfg(feature = "python-module")]
+#[cfg(all(feature = "python-module", not(doc)))]
 #[doc(hidden)]
 mod python_bindings;
