@@ -37,6 +37,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
+    env:
+      # Version-only requests can select emulated x64 Python on Windows ARM64.
+      UV_PYTHON_ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v6
       - name: Set up uv and the matrix interpreter
