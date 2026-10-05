@@ -93,7 +93,7 @@ Sphinx reads the installed extension's docstrings, so rebuild the extension afte
 
 ## Publishing Rust releases
 
-The `Rust crate` GitHub Actions workflow publishes to crates.io when a GitHub release is published with `main` as its target. It checks out the release tag and runs Rust unit tests and doctests before publishing the version recorded in `Cargo.toml`. Update that version before creating the release tag.
+The `Rust crate` GitHub Actions workflow runs Rust unit tests and doctests on every push, pull request, manual workflow dispatch, and published release. A separate publishing job runs only after the tests pass for a published release with `main` as its target. It checks out the release tag and publishes the version recorded in `Cargo.toml` to crates.io. Update that version before creating the release tag.
 
 Configure the repository secret `CARGO_REGISTRY_TOKEN` with a crates.io API token authorized to publish `lophat`. The token is supplied only to the publishing step. Tests and package verification enable `local_thread_pool` and `serde` without requiring Python; the crate's published default features are unchanged.
 

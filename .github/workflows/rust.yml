@@ -1,6 +1,9 @@
 name: Rust crate
 
 on:
+  push:
+  pull_request:
+  workflow_dispatch:
   release:
     types: [published]
 
@@ -8,17 +11,26 @@ permissions:
   contents: read
 
 jobs:
+  test:
+    name: Test the Rust crate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Test the Rust crate
+        run: cargo test --locked --no-default-features --features local_thread_pool,serde
+
   publish:
-    name: Test and publish to crates.io
-    if: github.event.release.target_commitish == 'main'
+    name: Publish to crates.io
+    if: github.event_name == 'release' && github.event.release.target_commitish == 'main'
+    needs: test
     runs-on: ubuntu-24.04
     steps:
       # Check out the release tag, so the published crate matches the release.
       - uses: actions/checkout@v6
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
-      - name: Test the Rust crate
-        run: cargo test --locked --no-default-features --features local_thread_pool,serde
       - name: Publish the Rust crate
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
