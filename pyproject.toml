@@ -27,6 +27,10 @@ test = [
 requires = ["maturin>=1.15.0"]
 build-backend = "maturin"
 
+[tool.maturin]
+locked = true
+profile = "release"
+
 [tool.pyrefly]
 preset = "default"
 
@@ -101,3 +105,6 @@ allow-multiline = true
 [tool.tombi.format.rules]
 indent-style = "tab"
 line-width = 100
+
+[tool.uv.config-settings]
+"maturin.build-args" = "--generate-stubs"
