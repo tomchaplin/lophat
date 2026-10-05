@@ -198,10 +198,14 @@ impl<C: Column> Decomposition<C> for SerialDecomposition<C> {
 
 #[cfg(test)]
 mod tests {
-	use std::collections::HashSet;
-
 	use super::*;
-	use crate::{columns::VecColumn, utils::PersistenceDiagram};
+	use crate::{
+		columns::VecColumn,
+		utils::{
+			ExtendedUsize::{Finite, Infinity},
+			PersistenceDiagram,
+		},
+	};
 
 	fn build_sphere_triangulation() -> impl Iterator<Item = VecColumn> {
 		vec![
@@ -227,10 +231,18 @@ mod tests {
 	#[test]
 	fn sphere_triangulation_correct() {
 		let matrix = build_sphere_triangulation();
-		let correct_diagram = PersistenceDiagram {
-			unpaired: HashSet::from_iter(vec![0, 13]),
-			paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
-		};
+		let correct_diagram: PersistenceDiagram = [
+			(0, Infinity),
+			(13, Infinity),
+			(1, Finite(4)),
+			(2, Finite(5)),
+			(3, Finite(7)),
+			(6, Finite(12)),
+			(8, Finite(10)),
+			(9, Finite(11)),
+		]
+		.into_iter()
+		.collect();
 		let computed_diagram = SerialAlgorithm::init(Some(LoPhatOptions::default()))
 			.add_cols(matrix)
 			.decompose()
@@ -245,10 +257,18 @@ mod tests {
 			maintain_v: true,
 			..Default::default()
 		};
-		let correct_diagram = PersistenceDiagram {
-			unpaired: HashSet::from_iter(vec![0, 13]),
-			paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
-		};
+		let correct_diagram: PersistenceDiagram = [
+			(0, Infinity),
+			(13, Infinity),
+			(1, Finite(4)),
+			(2, Finite(5)),
+			(3, Finite(7)),
+			(6, Finite(12)),
+			(8, Finite(10)),
+			(9, Finite(11)),
+		]
+		.into_iter()
+		.collect();
 		let decomp = SerialAlgorithm::init(Some(options))
 			.add_cols(matrix)
 			.decompose();

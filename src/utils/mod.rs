@@ -57,9 +57,7 @@ mod diagram;
 mod file_format;
 
 pub use anti_transpose::anti_transpose;
-pub use diagram::PersistenceDiagram;
-#[cfg(feature = "python-module")]
-pub use diagram::PersistenceDiagramWithReps;
+pub use diagram::{ExtendedUsize, PersistenceDiagram};
 #[cfg(feature = "serde")]
 pub use file_format::{
 	DecompositionFileFormat,

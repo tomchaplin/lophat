@@ -1,68 +1,79 @@
-"""Check diagram equality and exceptions for unsupported comparisons."""
-
-import operator
-from collections.abc import Callable
+"""Check birth-to-death dictionaries and representatives keyed by birth."""
 
 import pytest
-from lophat import (
-	PersistenceDiagram,
-	PersistenceDiagramWithReps,
-	compute_pairings,
-	compute_pairings_with_reps,
-)
+from lophat import compute_pairings, compute_pairings_with_reps
 
 
+@pytest.mark.parametrize("anti_transpose", [False, True])
 @pytest.mark.parametrize(
-	("additional_columns", "unchanged_attribute"),
+	("matrix", "expected"),
 	[
-		([(0, []), (1, [0, 3])], "unpaired"),
-		([(0, [])], "paired"),
+		([], {}),
+		([(0, [])], {0: None}),
+		([(0, []), (0, []), (1, [0, 1])], {0: None, 1: 2}),
 	],
 )
-def test_equality_compares_both_sets(
-	additional_columns: list[tuple[int, list[int]]],
-	unchanged_attribute: str,
+def test_diagrams_are_birth_to_death_dicts(
+	matrix: list[tuple[int, list[int]]],
+	expected: dict[int, int | None],
+	*,
+	anti_transpose: bool,
 ) -> None:
+	diagram = compute_pairings(matrix, anti_transpose=anti_transpose)
+	assert isinstance(diagram, dict)
+	assert diagram == expected
+	assert dict(diagram.items()) == expected
+	for birth, death in expected.items():
+		assert diagram[birth] == death
+	with pytest.raises(KeyError):
+		diagram[len(matrix)]
+
+
+def test_dictionary_results_are_independent() -> None:
+	matrix = [(0, []), (0, []), (1, [0, 1])]
+	diagram = compute_pairings(matrix)
+	diagram[0] = 2
+	diagram.pop(1)
+	assert compute_pairings(matrix) == {0: None, 1: 2}
+
+
+def test_dictionary_equality_compares_births_and_deaths() -> None:
 	matrix = [(0, []), (0, []), (1, [0, 1])]
 	diagram = compute_pairings(matrix)
 	assert diagram == compute_pairings(matrix)
-	other = compute_pairings(matrix + additional_columns)
-	assert getattr(diagram, unchanged_attribute) == getattr(other, unchanged_attribute)
-	assert not operator.eq(diagram, other)
+	assert diagram != compute_pairings([*matrix, (0, [])])
+	assert diagram != {0: None, 1: None}
 
 
 @pytest.mark.parametrize(
-	("compute", "attributes"),
+	("matrix", "expected", "expected_representatives"),
 	[
-		(compute_pairings, ("paired", "unpaired")),
-		(compute_pairings_with_reps, ("paired", "unpaired", "paired_reps", "unpaired_reps")),
+		([], {}, {}),
+		([(0, [])], {0: None}, {0: [0]}),
+		([(0, []), (0, []), (1, [0, 1])], {0: None, 1: 2}, {0: [0], 1: [0, 1]}),
 	],
 )
-def test_diagram_attributes_are_read_only(
-	compute: Callable[..., PersistenceDiagram | PersistenceDiagramWithReps],
-	attributes: tuple[str, ...],
+def test_representatives_are_keyed_by_birth(
+	matrix: list[tuple[int, list[int]]],
+	expected: dict[int, int | None],
+	expected_representatives: dict[int, list[int]],
 ) -> None:
-	diagram = compute([(0, []), (0, []), (1, [0, 1])])
-	for attribute in attributes:
-		expected = getattr(diagram, attribute)
-		with pytest.raises(AttributeError, match=attribute):
-			setattr(diagram, attribute, expected)
-		assert getattr(diagram, attribute) == expected
-		returned = getattr(diagram, attribute)
-		if attribute.endswith("_reps"):
-			returned[0].clear()
-		else:
-			returned.clear()
-		assert getattr(diagram, attribute) == expected
+	result = compute_pairings_with_reps(matrix)
+	assert isinstance(result, tuple)
+	assert len(result) == 2
+	diagram, representatives = result
+	assert isinstance(diagram, dict)
+	assert isinstance(representatives, dict)
+	assert diagram == expected
+	assert representatives == expected_representatives
+	assert diagram.keys() == representatives.keys()
 
 
-@pytest.mark.parametrize(
-	"compare", [operator.ne, operator.lt, operator.le, operator.gt, operator.ge]
-)
-def test_unsupported_comparisons_raise_not_implemented(
-	compare: Callable[[PersistenceDiagram, PersistenceDiagram], bool],
-) -> None:
-	diagram = compute_pairings([])
-	other = compute_pairings([])
-	with pytest.raises(NotImplementedError, match="Only equality comparisons are supported"):
-		compare(diagram, other)
+def test_representative_results_are_independent() -> None:
+	matrix = [(0, []), (0, []), (1, [0, 1])]
+	diagram, representatives = compute_pairings_with_reps(matrix)
+	representatives[1].clear()
+	representatives.pop(0)
+	assert diagram == {0: None, 1: 2}
+	diagram.clear()
+	assert compute_pairings_with_reps(matrix) == ({0: None, 1: 2}, {0: [0], 1: [0, 1]})

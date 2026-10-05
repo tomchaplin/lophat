@@ -2,7 +2,7 @@
 
 ## 0.12.0 (unreleased)
 
-Changes since 0.11.0 on `main`.
+Changes since 0.11.0.
 
 ### Breaking changes and migration
 
@@ -24,9 +24,21 @@ Changes since 0.11.0 on `main`.
   reports the former regardless of the original `maintain_v` setting; a nonempty
   decomposition without V reports the latter. Update error construction and
   pattern matches accordingly.
-- Make the Python attributes of `PersistenceDiagram` and
-  `PersistenceDiagramWithReps` read-only. Changes to returned sets or lists do
-  not update the diagram. `LoPhatOptions` attributes remain writable.
+- Replace `PersistenceDiagram`'s paired/unpaired sets with a
+  `HashMap<usize, ExtendedUsize>` mapping each birth to `Finite(death)` or
+  `Infinity`. Rust users can access map operations through `Deref` and
+  `DerefMut`, construct diagrams by collecting entries, and reindex endpoints
+  with `map_idxs`. `Decomposition::diagram()` uses the shared extraction logic.
+- Return a plain `dict[int, int | None]` from Python `compute_pairings`, replacing
+  the `PersistenceDiagram` Python class. Use `diagram[birth]` and
+  `diagram.items()` instead of `.paired` and `.unpaired`; `None` marks essential
+  features. Both owned and borrowed Rust diagrams and extended indices support
+  conversion when `python-module` is enabled, with generated return annotations.
+- Remove `PersistenceDiagramWithReps`. `compute_pairings_with_reps` now returns
+  `(PersistenceDiagram, HashMap<usize, Vec<usize>>)`, converted to two Python
+  dictionaries. Both maps use birth indices as keys; match an interval to its
+  representative with that key instead of aligned paired/unpaired lists.
+  Empty input returns `({}, {})`.
 
 ### Fixes
 
@@ -46,11 +58,7 @@ Changes since 0.11.0 on `main`.
 - Snapshot Python options before consuming the matrix, so changes made during
   iteration do not affect the computation. The supplied options are not modified,
   including when computing representatives requires V to be retained.
-- Export the diagram classes from `lophat` and set the correct module names on
-  public Python classes.
-- Raise `NotImplementedError` for unsupported comparisons between
-  `PersistenceDiagram` objects instead of `PanicException`; `==` compares the
-  paired and unpaired sets.
+- Set the correct module name on `LoPhatOptions`.
 - Exclude the private Python bindings module from Rust documentation builds, so
   its Python examples are not compiled as Rust doctests.
 - Select native ARM64 Python on Windows explicitly through `UV_PYTHON_ARCH`,
@@ -82,8 +90,8 @@ Changes since 0.11.0 on `main`.
   dependency group. The core `test` group requires only pytest; benchmark tests
   are skipped when pytest-benchmark is unavailable.
 - Add regression tests for empty decomposition serialization, V availability,
-  diagram attributes and comparisons, options snapshots, and concurrent calls,
-  including free-threaded Python.
+  dictionary conversion, representatives keyed by birth, options snapshots, and
+  concurrent calls, including free-threaded Python.
 - Replace the Python CI workflow with uv and Maturin builds that test installed
   wheels and verify generated stubs on Linux and Windows x64/ARM64 and macOS
   ARM64. Select stable CPython versions from `requires-python`, including supported

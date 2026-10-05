@@ -16,16 +16,16 @@ while a call reads them, and use a separate iterator for each concurrent call.
 Computations can run concurrently, including on free-threaded Python."#]
 #[pymodule(name = "lophat", gil_used = false)]
 mod inner {
+	use std::collections::HashMap;
+
 	use pyo3::prelude::*;
 
+	#[pymodule_export]
+	pub use crate::options::LoPhatOptions;
 	use crate::{
 		algorithms::{Decomposition, DecompositionAlgo, LockFreeAlgorithm},
 		columns::{Column, VecColumn},
-	};
-	#[pymodule_export]
-	pub use crate::{
-		options::LoPhatOptions,
-		utils::{PersistenceDiagram, PersistenceDiagramWithReps},
+		utils::{ExtendedUsize, PersistenceDiagram},
 	};
 
 	// Carry the accepted input shape into PyO3's introspection metadata without
@@ -70,8 +70,14 @@ mod inner {
     not modified, and later changes to them do not affect this computation.
     :py:attr:`~lophat.LoPhatOptions.maintain_v` is ignored; representatives are
     always computed.
-:returns: A :py:class:`~lophat.PersistenceDiagramWithReps` containing pairs,
-    unpaired births, and representative cycles in the original input basis.
+:returns: A :py:class:`tuple` of two dictionaries ``(diagram, representatives)``.
+    The diagram maps each birth column index to its death column index, or
+    ``None`` for a feature that persists beyond the supplied filtration.
+    The representatives map has exactly the same birth keys. Each value lists
+    the nonzero input basis indices of a representative cycle, with coefficient
+    one over the field with two elements. For a finite interval, the cycle becomes
+    a boundary at its death; an essential feature's cycle persists beyond the
+    supplied filtration. Indices refer to columns, not filtration values.
 
 The input is reduced directly, without anti-transposition.
 :py:attr:`~lophat.LoPhatOptions.clearing` defaults to ``True`` and requires a
@@ -85,7 +91,10 @@ The iterable is consumed once. If a call fails while reading the input, the
 iterator may already be partly consumed. Retry with a fresh iterator, and do not
 consume the same iterator from another thread. Keep its columns unchanged while
 they are being read. Exceptions raised by the iterable propagate to the caller.
-An empty input returns a diagram containing four empty lists.
+An empty input returns ``({}, {})``. Use ``diagram[birth]`` to look up a death
+and ``representatives[birth]`` to look up its cycle. Both dictionaries and their
+returned lists can be edited independently of other results. Dictionary order
+is unspecified; match each diagram entry to its representative by birth key.
 
 .. rubric:: Raises
 
@@ -104,16 +113,16 @@ An empty input returns a diagram containing four empty lists.
 Example::
 
     matrix = [(0, []), (0, []), (1, [0, 1])]
-    diagram = compute_pairings_with_reps(matrix)
-    assert set(diagram.paired) == {(1, 2)}
-    assert diagram.unpaired == [0]"#]
+    diagram, representatives = compute_pairings_with_reps(matrix)
+    assert diagram == {0: None, 1: 2}
+    assert representatives == {0: [0], 1: [0, 1]}"#]
 	#[pyfunction]
 	#[pyo3(signature = (matrix, options=None))]
 	fn compute_pairings_with_reps(
 		py: Python<'_>,
 		matrix: MatrixInput<'_>,
 		options: Option<Bound<'_, LoPhatOptions>>,
-	) -> PyResult<PersistenceDiagramWithReps> {
+	) -> PyResult<(PersistenceDiagram, HashMap<usize, Vec<usize>>)> {
 		// Overwrite maintain_v in options
 		let options = Some(LoPhatOptions {
 			maintain_v: true,
@@ -134,34 +143,22 @@ Example::
 			let decomposition = LockFreeAlgorithm::init(options)
 				.add_cols(matrix_as_vec.into_iter())
 				.decompose();
-			// Read off diagram and pull out representatives
-			let mut diagram = decomposition.diagram();
-			let (paired, paired_reps): (Vec<_>, Vec<Vec<_>>) = diagram
-				.paired
-				.drain()
-				.map(|pairing| {
-					(
-						pairing,
-						decomposition.get_r_col(pairing.1).entries().collect(),
-					)
+			let diagram = decomposition.diagram();
+			let representatives = diagram
+				.iter()
+				.map(|(&birth, &death)| {
+					let representative = match death {
+						ExtendedUsize::Finite(death) => {
+							decomposition.get_r_col(death).entries().collect()
+						},
+						ExtendedUsize::Infinity => {
+							decomposition.get_v_col(birth).unwrap().entries().collect()
+						},
+					};
+					(birth, representative)
 				})
-				.unzip();
-			let (unpaired, unpaired_reps): (Vec<_>, Vec<Vec<_>>) = diagram
-				.unpaired
-				.drain()
-				.map(|birth| {
-					(
-						birth,
-						decomposition.get_v_col(birth).unwrap().entries().collect(),
-					)
-				})
-				.unzip();
-			Ok(PersistenceDiagramWithReps {
-				paired,
-				unpaired,
-				paired_reps,
-				unpaired_reps,
-			})
+				.collect();
+			Ok((diagram, representatives))
 		})
 	}
 
@@ -177,10 +174,10 @@ Example::
 :param options: A :py:class:`~lophat.LoPhatOptions`, or ``None`` to use defaults.
     Settings are selected before consuming the matrix. The supplied options are
     not modified, and later changes to them do not affect this computation.
-:returns: A :py:class:`~lophat.PersistenceDiagram` containing ``(birth, death)``
-    column-index pairs and unpaired birth indices. These are indices, not
-    filtration values. Use :py:func:`~lophat.compute_pairings_with_reps` to also
-    obtain representative cycles.
+:returns: A :py:class:`dict` mapping each birth column index to its death
+    column index, or ``None`` for a feature that persists beyond the supplied
+    filtration. These are indices, not filtration values. Use
+    :py:func:`~lophat.compute_pairings_with_reps` to also obtain representative cycles.
 
 :py:attr:`~lophat.LoPhatOptions.clearing` defaults to ``True`` and requires a
 square boundary matrix with ``D * D = 0`` and correct chain degrees. For
@@ -193,7 +190,9 @@ The iterable is consumed once. If a call fails while reading the input, the
 iterator may already be partly consumed. Retry with a fresh iterator, and do not
 consume the same iterator from another thread. Keep its columns unchanged while
 they are being read. Exceptions raised by the iterable propagate to the caller.
-An empty input returns a diagram containing two empty sets.
+An empty input returns an empty dictionary. Use ``diagram[birth]`` for lookup
+and ``diagram.items()`` to iterate over intervals. The returned dictionary can
+be edited independently of other results.
 
 .. rubric:: Raises
 
@@ -214,8 +213,7 @@ Example::
 
     matrix = [(0, []), (0, []), (1, [0, 1])]
     diagram = compute_pairings(matrix)
-    assert diagram.paired == {(1, 2)}
-    assert diagram.unpaired == {0}"#]
+    assert diagram == {0: None, 1: 2}"#]
 	#[pyfunction]
 	#[pyo3(signature = (matrix,anti_transpose= true, options=None))]
 	fn compute_pairings(

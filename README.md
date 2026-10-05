@@ -40,6 +40,10 @@ Install with
 ```shell
 cargo add lophat
 ```
+`PersistenceDiagram` wraps a `HashMap<usize, ExtendedUsize>` and exposes map operations through `Deref` and `DerefMut`.
+`ExtendedUsize::Finite(index)` represents a finite death; `ExtendedUsize::Infinity` represents an essential feature.
+Use `Decomposition::diagram()` or `PersistenceDiagram::from_decomposition()` to extract intervals, and `map_idxs()` to reindex their endpoints.
+
 For usage, please consult [the Rust docs](https://docs.rs/lophat/latest/lophat/).
 
 ## Usage in Python
@@ -53,8 +57,12 @@ To force installing from binary run
 ```shell
 pip install --only-binary lophat lophat
 ```
-`compute_pairings` returns a diagram containing a set of paired column indices and a set of unpaired indices.
-`compute_pairings_with_reps` also returns representative cycles, expressed as lists of nonzero input basis indices over the field with two elements.
+`compute_pairings` returns a dictionary mapping birth column indices to death column indices, with `None` for features that persist beyond the supplied filtration.
+For example, `{0: None, 1: 2}` contains an essential feature born at index 0 and a feature born at index 1 that dies at index 2.
+Use `diagram[birth]` for lookup and `diagram.items()` to iterate over intervals.
+`compute_pairings_with_reps` returns `(diagram, representatives)`: the same birth-to-death dictionary and a second dictionary mapping each birth index to its representative cycle.
+A cycle is a list of nonzero input basis indices over the field with two elements. The two dictionaries have identical keys; use a birth key to match an interval to its representative.
+Empty input returns `({}, {})`.
 Both functions use the lockfree algorithm of [[1]](#1).
 Pass a `LoPhatOptions` object to configure the worker count, clearing, and other options; `num_threads=1` runs the same algorithm with one worker.
 

@@ -5,7 +5,7 @@
 //! provides access to R, optionally V, and the resulting persistence diagram.
 //! All arithmetic is over the field with two elements.
 
-use std::{collections::HashSet, ops::Deref};
+use std::ops::Deref;
 
 use crate::{columns::Column, utils::PersistenceDiagram};
 
@@ -81,27 +81,13 @@ where
 
 	/// Read persistence pairings and unpaired indices from the pivots of R.
 	///
-	/// A nonzero R column at index `death` contributes `(pivot, death)`.
-	/// All input indices that occur in no pair are returned as unpaired.
-	/// Indices refer to the input basis, not filtration values. Requires no V
-	/// columns; an empty decomposition produces an empty diagram. The intended
-	/// persistence interpretation assumes a valid filtered boundary matrix.
-	fn diagram(&self) -> PersistenceDiagram {
-		let r_col_iter = (0..self.n_cols()).map(|idx| self.get_r_col(idx));
-		let paired: HashSet<(usize, usize)> = r_col_iter
-			.enumerate()
-			.filter_map(|(idx, col)| {
-				let lowest_idx = col.pivot()?;
-				Some((lowest_idx, idx))
-			})
-			.collect();
-		let mut unpaired: HashSet<usize> = (0..self.n_cols()).collect();
-		for (birth, death) in paired.iter() {
-			unpaired.remove(birth);
-			unpaired.remove(death);
-		}
-		PersistenceDiagram { unpaired, paired }
-	}
+	/// A nonzero R column at index `death` contributes `pivot ->
+	/// Finite(death)`. All input indices that occur in no pair are mapped
+	/// to `ExtendedUsize::Infinity`. Indices refer to the input basis, not
+	/// filtration values. Requires no V columns; an empty decomposition
+	/// produces an empty diagram. The intended persistence interpretation
+	/// assumes a valid filtered boundary matrix.
+	fn diagram(&self) -> PersistenceDiagram { PersistenceDiagram::from_decomposition(self) }
 
 	/// Report whether a nonempty decomposition retained V.
 	///

@@ -10,15 +10,11 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event, Thread
 
 import pytest
-from lophat import (
-	LoPhatOptions,
-	PersistenceDiagram,
-	PersistenceDiagramWithReps,
-	compute_pairings,
-	compute_pairings_with_reps,
-)
+from lophat import LoPhatOptions, compute_pairings, compute_pairings_with_reps
 
 type AnnotatedColumn = tuple[int, list[int]]
+type Diagram = dict[int, int | None]
+type DiagramWithReps = tuple[Diagram, dict[int, list[int]]]
 
 MATRIX = [
 	(0, []),
@@ -29,13 +25,12 @@ MATRIX = [
 	(1, [1, 2]),
 	(2, [3, 4, 5]),
 ]
-PAIRED = {(1, 3), (2, 4), (5, 6)}
-UNPAIRED = {0}
+EXPECTED = {0: None, 1: 3, 2: 4, 5: 6}
 
 
-def assert_pairings(diagram: PersistenceDiagram | PersistenceDiagramWithReps) -> None:
-	assert set(diagram.paired) == PAIRED
-	assert set(diagram.unpaired) == UNPAIRED
+def assert_pairings(result: Diagram | DiagramWithReps) -> None:
+	diagram = result[0] if isinstance(result, tuple) else result
+	assert diagram == EXPECTED
 
 
 def assert_cycle(representative: list[int]) -> None:
@@ -98,14 +93,10 @@ def test_concurrent_representatives(num_threads: int, *, clearing: bool) -> None
 		barrier.wait(timeout=10)
 		for _ in range(6):
 			matrix = MATRIX if index % 2 == 0 else iter(MATRIX)
-			diagram = compute_pairings_with_reps(matrix, options)
+			diagram, representatives = compute_pairings_with_reps(matrix, options)
 			assert_pairings(diagram)
-			assert len(diagram.paired) == len(diagram.paired_reps)
-			assert len(diagram.unpaired) == len(diagram.unpaired_reps)
-			for (birth, _), representative in zip(diagram.paired, diagram.paired_reps, strict=True):
-				assert max(representative) == birth
-				assert_cycle(representative)
-			for birth, representative in zip(diagram.unpaired, diagram.unpaired_reps, strict=True):
+			assert representatives.keys() == diagram.keys()
+			for birth, representative in representatives.items():
 				assert max(representative) == birth
 				assert_cycle(representative)
 
@@ -162,21 +153,13 @@ def test_computations_during_garbage_collection() -> None:
 def test_shared_diagram_reads(compute: Callable) -> None:
 	diagram = compute(MATRIX, options=LoPhatOptions(num_threads=1))
 	expected = compute(MATRIX, options=LoPhatOptions(num_threads=1))
-	representatives = (
-		(diagram.paired_reps, diagram.unpaired_reps)
-		if isinstance(diagram, PersistenceDiagramWithReps)
-		else None
-	)
 	barrier = Barrier(4)
 
 	def worker(_: int) -> None:
 		barrier.wait(timeout=10)
 		for _ in range(100):
 			assert_pairings(diagram)
-			if isinstance(diagram, PersistenceDiagram):
-				assert diagram == expected
-			else:
-				assert (diagram.paired_reps, diagram.unpaired_reps) == representatives
+			assert diagram == expected
 			repr(diagram)
 
 	with ThreadPoolExecutor(max_workers=4) as executor:

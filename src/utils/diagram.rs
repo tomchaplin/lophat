@@ -1,264 +1,301 @@
-use std::collections::HashSet;
+use std::{
+	collections::{HashMap, HashSet},
+	fmt::{self, Display},
+	ops::{Deref, DerefMut},
+};
 
 #[cfg(feature = "python-module")]
 use pyo3::prelude::*;
 
-/// Persistence pairings and unpaired column indices read from a reduced matrix.
+use crate::{algorithms::Decomposition, columns::Column};
+
+/// A nonnegative index or infinity.
 ///
-/// Each pair `(birth, death)` records a pivot row and the column that kills the
-/// feature born at that row. Unpaired indices represent features that do not
-/// die within the supplied filtration. For a valid filtered boundary matrix,
-/// each input column index occurs exactly once across these sets.
+/// [`Self::Infinity`] is greater than every finite value, including
+/// `usize::MAX`. In a persistence diagram, finite values identify death columns
+/// and infinity identifies features that persist beyond the supplied
+/// filtration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ExtendedUsize {
+	/// A finite index.
+	Finite(usize),
+	/// A value greater than every finite index.
+	Infinity,
+}
+
+use ExtendedUsize::{Finite, Infinity};
+
+impl Display for ExtendedUsize {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Finite(index) => write!(f, "{index}"),
+			Infinity => write!(f, "Inf"),
+		}
+	}
+}
+
+#[cfg(feature = "python-module")]
+impl<'py> IntoPyObject<'py> for ExtendedUsize {
+	type Error = PyErr;
+	type Output = Bound<'py, PyAny>;
+	type Target = PyAny;
+
+	const OUTPUT_TYPE: pyo3::inspect::PyStaticExpr =
+		<Option<usize> as IntoPyObject<'py>>::OUTPUT_TYPE;
+
+	fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+		let index = match self {
+			Finite(index) => Some(index),
+			Infinity => None,
+		};
+		Ok(index.into_pyobject(py)?)
+	}
+}
+
+#[cfg(feature = "python-module")]
+impl<'py> IntoPyObject<'py> for &ExtendedUsize {
+	type Error = PyErr;
+	type Output = Bound<'py, PyAny>;
+	type Target = PyAny;
+
+	const OUTPUT_TYPE: pyo3::inspect::PyStaticExpr =
+		<ExtendedUsize as IntoPyObject<'py>>::OUTPUT_TYPE;
+
+	fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> { (*self).into_pyobject(py) }
+}
+
+/// Map each feature's birth index to its death index or infinity.
 ///
-/// The sets have no specified iteration order. Indices refer to input columns,
-/// not filtration values. An empty matrix produces two empty sets.
-#[doc = python_doc!(
-r#"Persistence pairings and unpaired indices in the input boundary matrix.
+/// Finite deaths use [`ExtendedUsize::Finite`]; essential features use
+/// [`ExtendedUsize::Infinity`]. Indices refer to the input basis, not
+/// filtration values. Each birth appears once, and death columns are not
+/// separate keys. The map has no specified iteration order. Its display is
+/// sorted by birth.
+///
+/// Construct directly from a [`HashMap`], collect `(birth, death)` entries, or
+/// extract from a reduced matrix with [`Self::from_decomposition`]. [`Deref`]
+/// and [`DerefMut`] expose the map for lookup, iteration, and editing. An empty
+/// decomposition produces an empty map. [`Self::map_idxs`] reindexes endpoints;
+/// [`Self::anti_transpose`] restores anti-transposed matrix coordinates.
+///
+/// # Example
+///
+/// ```
+/// use lophat::utils::{
+/// 	ExtendedUsize::{Finite, Infinity},
+/// 	PersistenceDiagram,
+/// };
+///
+/// let diagram: PersistenceDiagram = [(0, Infinity), (1, Finite(2))].into_iter().collect();
+/// assert_eq!(diagram[&1], Finite(2));
+/// assert_eq!(diagram.to_string(), "{0: Inf, 1: 2}");
+/// ```
+#[cfg_attr(feature = "python-module", derive(IntoPyObject, IntoPyObjectRef))]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct PersistenceDiagram(
+	/// Birth-to-death entries; keys identify features uniquely.
+	pub HashMap<usize, ExtendedUsize>,
+);
 
-Each ``(birth, death)`` pair contains column indices, not filtration values.
-Unpaired indices identify features that persist beyond the supplied filtration.
-For a valid filtered boundary matrix, each input index occurs exactly once
-across :py:attr:`~lophat.PersistenceDiagram.paired` and
-:py:attr:`~lophat.PersistenceDiagram.unpaired`. Both attributes are sets with
-unspecified order.
+impl Deref for PersistenceDiagram {
+	type Target = HashMap<usize, ExtendedUsize>;
 
-Returned by :py:func:`~lophat.compute_pairings`; direct construction is not
-supported. Both attributes are read-only. Changing a set obtained from an
-attribute does not update the diagram.
+	fn deref(&self) -> &Self::Target { &self.0 }
+}
 
-Equality with ``==`` compares both sets. Other comparisons are unsupported.
-An empty input produces empty sets.
+impl DerefMut for PersistenceDiagram {
+	fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
+}
 
-:ivar paired: Set of (birth, death) index pairs.
-:ivar unpaired: Set of indices of features that remain unpaired.
+impl Display for PersistenceDiagram {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let mut entries: Vec<_> = self.iter().collect();
+		entries.sort_unstable_by_key(|(birth, _)| **birth);
+		write!(f, "{{")?;
+		for (position, (birth, death)) in entries.into_iter().enumerate() {
+			if position > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{birth}: {death}")?;
+		}
+		write!(f, "}}")
+	}
+}
 
-.. rubric:: Raises
-
-:py:exc:`AttributeError`
-    If assigning to a read-only attribute.
-:py:exc:`TypeError`
-    If constructing this class directly.
-:py:exc:`NotImplementedError`
-    If a comparison other than ``==`` is requested between diagrams."#
-)]
-#[cfg_attr(
-	all(feature = "python-module", not(any(doc, rust_analyzer))),
-	crate::utils::macro_rules_apply(crate::utils::strip_rust_docs!)
-)]
-#[cfg_attr(
-	feature = "python-module",
-	pyclass(module = "lophat", skip_from_py_object, get_all)
-)]
-#[derive(Default, Debug, Clone, PartialEq)]
-pub struct PersistenceDiagram {
-	/// Indices of columns that occur in no persistence pairing.
-	#[doc = python_doc!(
-r#"Set of indices of features that remain unpaired.
-
-This attribute is read-only. Changing the returned set does not update the diagram.
-
-.. rubric:: Raises
-
-:py:exc:`AttributeError`
-    If assigning to this attribute."#
-	)]
-	pub unpaired: HashSet<usize>,
-	/// Persistence pairs `(birth, death)` in input column indices.
-	#[doc = python_doc!(
-r#"Set of ``(birth, death)`` pairs in input column indices.
-
-This attribute is read-only. Changing the returned set does not update the diagram.
-
-.. rubric:: Raises
-
-:py:exc:`AttributeError`
-    If assigning to this attribute."#
-	)]
-	pub paired: HashSet<(usize, usize)>,
+impl FromIterator<(usize, ExtendedUsize)> for PersistenceDiagram {
+	fn from_iter<T: IntoIterator<Item = (usize, ExtendedUsize)>>(iter: T) -> Self {
+		Self(iter.into_iter().collect())
+	}
 }
 
 impl PersistenceDiagram {
-	/// Convert a diagram of an anti-transposed square matrix to original
-	/// indices.
+	/// Extract persistence intervals from the pivots of a reduced matrix R.
 	///
-	/// Consumes the diagram and maps each pair `(b, d)` to
-	/// `(matrix_size - 1 - d, matrix_size - 1 - b)`, and each unpaired index
-	/// `i` to `matrix_size - 1 - i`. `matrix_size` is the original matrix's
-	/// column count. Empty diagrams remain empty, including when
-	/// `matrix_size` is zero.
+	/// A nonzero R column at index `death` contributes `pivot ->
+	/// Finite(death)`. Input indices that occur in no finite pair
+	/// contribute `birth -> Infinity`. V is not needed. A stored zero
+	/// column can represent an essential birth; an empty decomposition
+	/// produces an empty diagram.
+	///
+	/// The persistence interpretation requires a valid filtered boundary
+	/// matrix. Results use the supplied matrix coordinates; reverse
+	/// anti-transposed coordinates separately using
+	/// [`Self::anti_transpose`]. Matrix consistency is not validated.
+	pub fn from_decomposition<C: Column>(decomposition: &(impl Decomposition<C> + ?Sized)) -> Self {
+		let mut diagram = Self::default();
+		let mut deaths = HashSet::new();
+		for death in 0..decomposition.n_cols() {
+			if let Some(birth) = decomposition.get_r_col(death).pivot() {
+				diagram.insert(birth, Finite(death));
+				deaths.insert(death);
+			}
+		}
+		for birth in 0..decomposition.n_cols() {
+			if !deaths.contains(&birth) {
+				diagram.entry(birth).or_insert(Infinity);
+			}
+		}
+		diagram
+	}
+
+	/// Restore the original indices of an anti-transposed square matrix.
+	///
+	/// Consumes the diagram. Finite pairs `(b, d)` become
+	/// `(matrix_size - 1 - d, matrix_size - 1 - b)`; essential births `b`
+	/// become `matrix_size - 1 - b`. Every finite index must be less than
+	/// `matrix_size`. An empty diagram accepts size zero.
 	///
 	/// # Panics
 	///
 	/// May panic on subtraction overflow if any index is at least
 	/// `matrix_size`.
-	pub fn anti_transpose(mut self, matrix_size: usize) -> Self {
-		let new_paired = self
-			.paired
+	pub fn anti_transpose(self, matrix_size: usize) -> Self {
+		self.0
 			.into_iter()
-			.map(|(b, d)| (matrix_size - 1 - d, matrix_size - 1 - b))
+			.map(|(birth, death)| {
+				match death {
+					Finite(death) => (matrix_size - 1 - death, Finite(matrix_size - 1 - birth)),
+					Infinity => (matrix_size - 1 - birth, Infinity),
+				}
+			})
+			.collect()
+	}
+
+	/// Map each birth and finite death through `f`, leaving infinity unchanged.
+	///
+	/// Consumes the diagram. To preserve distinct features, `f` must be
+	/// injective on births. Colliding keys overwrite entries in unspecified
+	/// order. No filtration-order validation is performed. Use an
+	/// inverse-permutation closure to restore original coordinates after a
+	/// permuted reduction.
+	pub fn map_idxs(mut self, mut f: impl FnMut(usize) -> usize) -> Self {
+		self.0 = self
+			.drain()
+			.map(|(birth, death)| {
+				let birth = f(birth);
+				let death = match death {
+					Finite(death) => Finite(f(death)),
+					Infinity => Infinity,
+				};
+				(birth, death)
+			})
 			.collect();
-		let new_unpaired = self
-			.unpaired
-			.into_iter()
-			.map(|idx| matrix_size - 1 - idx)
-			.collect();
-		self.paired = new_paired;
-		self.unpaired = new_unpaired;
 		self
 	}
 }
 
-impl std::fmt::Display for PersistenceDiagram {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(
-			f,
-			"Paired: {:?}\nUnpaired: {:?}",
-			self.paired, self.unpaired
-		)
-	}
-}
+#[cfg(test)]
+mod tests {
+	use super::{
+		ExtendedUsize::{Finite, Infinity},
+		PersistenceDiagram,
+	};
+	use crate::{
+		algorithms::{Decomposition, DecompositionAlgo, SerialAlgorithm},
+		columns::VecColumn,
+		options::LoPhatOptions,
+		utils::anti_transpose,
+	};
 
-#[cfg(feature = "python-module")]
-#[cfg_attr(
-	all(feature = "python-module", not(any(doc, rust_analyzer))),
-	crate::utils::macro_rules_apply(crate::utils::strip_rust_docs!)
-)]
-#[pymethods]
-impl PersistenceDiagram {
-	#[doc = python_doc!(
-r#"Compare both paired and unpaired sets with another :py:class:`~lophat.PersistenceDiagram`.
-
-Only ``==`` is supported.
-
-:returns: ``True`` if both diagrams have the same pairings and unpaired indices,
-    otherwise ``False``.
-
-.. rubric:: Raises
-
-:py:exc:`NotImplementedError`
-    If a comparison other than ``==`` is requested."#
-	)]
-	fn __richcmp__(
-		&self,
-		other: &PersistenceDiagram,
-		cmp_op: pyo3::pyclass::CompareOp,
-	) -> PyResult<bool> {
-		match cmp_op {
-			pyo3::pyclass::CompareOp::Eq => Ok(self == other),
-			_ => {
-				Err(pyo3::exceptions::PyNotImplementedError::new_err(
-					"Only equality comparisons are supported for PersistenceDiagram",
-				))
-			},
+	#[test]
+	fn diagrams_from_boundary_and_anti_transpose_agree() {
+		let matrix: Vec<VecColumn> = vec![
+			(0, vec![]),
+			(0, vec![]),
+			(0, vec![]),
+			(1, vec![0, 1]),
+			(1, vec![1, 2]),
+			(1, vec![0, 2]),
+			(2, vec![3, 4, 5]),
+		]
+		.into_iter()
+		.map(VecColumn::from)
+		.collect();
+		let expected: PersistenceDiagram = [
+			(0, Infinity),
+			(1, Finite(3)),
+			(2, Finite(4)),
+			(5, Finite(6)),
+		]
+		.into_iter()
+		.collect();
+		for maintain_v in [false, true] {
+			let options = LoPhatOptions {
+				maintain_v,
+				..Default::default()
+			};
+			let decomposition = SerialAlgorithm::init(Some(options))
+				.add_cols(matrix.clone().into_iter())
+				.decompose();
+			assert_eq!(
+				PersistenceDiagram::from_decomposition(&decomposition),
+				expected
+			);
+			assert_eq!(decomposition.diagram(), expected);
+			let transposed = SerialAlgorithm::init(Some(options))
+				.add_cols(anti_transpose(&matrix).into_iter())
+				.decompose();
+			assert_eq!(transposed.diagram().anti_transpose(matrix.len()), expected);
 		}
 	}
 
-	#[doc = python_doc!(
-r#"Return a string displaying :py:attr:`~lophat.PersistenceDiagram.paired`
-and :py:attr:`~lophat.PersistenceDiagram.unpaired`."#
-	)]
-	fn __repr__(&self) -> String { self.to_string() }
-}
+	#[test]
+	fn empty_and_zero_column_decompositions() {
+		for maintain_v in [false, true] {
+			let options = LoPhatOptions {
+				maintain_v,
+				..Default::default()
+			};
+			let empty = SerialAlgorithm::<VecColumn>::init(Some(options)).decompose();
+			assert_eq!(
+				empty.diagram().anti_transpose(0),
+				PersistenceDiagram::default()
+			);
+			let zero = SerialAlgorithm::init(Some(options))
+				.add_cols(std::iter::once(VecColumn::from((0, vec![]))))
+				.decompose();
+			assert_eq!(zero.diagram(), [(0, Infinity)].into_iter().collect());
+		}
+	}
 
-#[cfg(feature = "python-module")]
-/// Persistence pairings together with representative cycles over the field with
-/// two elements.
-///
-/// `paired_reps[i]` corresponds to `paired[i]`, and `unpaired_reps[i]`
-/// corresponds to `unpaired[i]`. For a finite pair `(birth, death)`, the
-/// representative is column `death` of R; for an unpaired birth, it is that
-/// column of V. Each cycle is represented by the indices of its nonzero
-/// coefficients in the original chain basis. List order is unspecified, but
-/// corresponding lists are aligned.
-#[doc = python_doc!(
-r#"Persistence pairings with representative cycles over the field with two elements.
+	#[test]
+	fn infinity_orders_after_all_finite_indices() {
+		assert!(Finite(0) < Finite(1));
+		assert!(Finite(usize::MAX) < Infinity);
+		assert_eq!(Infinity.cmp(&Infinity), std::cmp::Ordering::Equal);
+		assert_eq!(Finite(usize::MAX).to_string(), usize::MAX.to_string());
+		assert_eq!(Infinity.to_string(), "Inf");
+	}
 
-Returned by :py:func:`~lophat.compute_pairings_with_reps`; direct construction is
-not supported. ``paired_reps[i]`` corresponds to ``paired[i]``, and
-``unpaired_reps[i]`` corresponds to ``unpaired[i]``. The order of features is
-unspecified, but these lists are aligned.
-
-A representative lists the input column indices that form a cycle, each with
-coefficient one. For a finite ``(birth, death)`` pair, that cycle becomes a
-boundary when the death column enters the filtration. An unpaired feature's
-cycle persists beyond the supplied filtration.
-
-All attributes are read-only. Changing a returned list, including its nested
-lists, does not update the diagram or the alignment of its representative lists.
-An empty input produces four empty lists.
-
-:ivar paired: List of (birth, death) index pairs.
-:ivar unpaired: List of unpaired birth indices.
-:ivar paired_reps: Representative cycles aligned with
-    :py:attr:`~lophat.PersistenceDiagramWithReps.paired`.
-:ivar unpaired_reps: Representative cycles aligned with
-    :py:attr:`~lophat.PersistenceDiagramWithReps.unpaired`.
-
-.. rubric:: Raises
-
-:py:exc:`AttributeError`
-    If assigning to a read-only attribute.
-:py:exc:`TypeError`
-    If constructing this class directly."#
-)]
-#[cfg_attr(
-	all(feature = "python-module", not(any(doc, rust_analyzer))),
-	crate::utils::macro_rules_apply(crate::utils::strip_rust_docs!)
-)]
-#[pyclass(skip_from_py_object, get_all, module = "lophat")]
-pub struct PersistenceDiagramWithReps {
-	/// Finite `(birth, death)` pairs, aligned with [`Self::paired_reps`].
-	#[doc = python_doc!(
-r#"List of ``(birth, death)`` pairs, aligned with
-:py:attr:`~lophat.PersistenceDiagramWithReps.paired_reps`.
-
-This attribute is read-only. Changing the returned list does not update the diagram.
-
-.. rubric:: Raises
-
-:py:exc:`AttributeError`
-    If assigning to this attribute."#
-	)]
-	pub paired: Vec<(usize, usize)>,
-	/// Unpaired birth indices, aligned with [`Self::unpaired_reps`].
-	#[doc = python_doc!(
-r#"List of unpaired birth indices, aligned with
-:py:attr:`~lophat.PersistenceDiagramWithReps.unpaired_reps`.
-
-This attribute is read-only. Changing the returned list does not update the diagram.
-
-.. rubric:: Raises
-
-:py:exc:`AttributeError`
-    If assigning to this attribute."#
-	)]
-	pub unpaired: Vec<usize>,
-	/// Nonzero basis indices of representative R columns, aligned with
-	/// [`Self::paired`].
-	#[doc = python_doc!(
-r#"Representative cycles aligned with :py:attr:`~lophat.PersistenceDiagramWithReps.paired`.
-
-This attribute is read-only. Changing the returned lists, including their nested
-lists, does not update the diagram.
-
-.. rubric:: Raises
-
-:py:exc:`AttributeError`
-    If assigning to this attribute."#
-	)]
-	pub paired_reps: Vec<Vec<usize>>,
-	/// Nonzero basis indices of representative V columns, aligned with
-	/// [`Self::unpaired`].
-	#[doc = python_doc!(
-r#"Representative cycles aligned with :py:attr:`~lophat.PersistenceDiagramWithReps.unpaired`.
-
-This attribute is read-only. Changing the returned lists, including their nested
-lists, does not update the diagram.
-
-.. rubric:: Raises
-
-:py:exc:`AttributeError`
-    If assigning to this attribute."#
-	)]
-	pub unpaired_reps: Vec<Vec<usize>>,
+	#[test]
+	fn mapping_and_display_preserve_finite_and_essential_intervals() {
+		let original: PersistenceDiagram = [(0, Finite(3)), (1, Infinity)].into_iter().collect();
+		let mapped = original.clone().map_idxs(|idx| idx + 5);
+		assert_eq!(
+			mapped,
+			[(5, Finite(8)), (6, Infinity)].into_iter().collect()
+		);
+		assert_eq!(mapped.to_string(), "{5: 8, 6: Inf}");
+		assert_eq!(original[&0], Finite(3));
+	}
 }

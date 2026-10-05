@@ -46,13 +46,14 @@
 //!
 //! ```
 //! // Import the algorithm you want to use as well as the decomposition and algorithm traits
-//! use std::collections::HashSet;
-//!
 //! // Import the column representation we want to use
-//! use lophat::columns::VecColumn;
 //! use lophat::{
 //! 	algorithms::{Decomposition, DecompositionAlgo, LockFreeAlgorithm},
-//! 	utils::PersistenceDiagram,
+//! 	columns::VecColumn,
+//! 	utils::{
+//! 		ExtendedUsize::{Finite, Infinity},
+//! 		PersistenceDiagram,
+//! 	},
 //! };
 //!
 //! fn build_sphere_triangulation() -> impl Iterator<Item = VecColumn> {
@@ -83,10 +84,18 @@
 //! // Compute the persistence diagram
 //! let computed_diagram = decomposition.diagram();
 //! // Ensure we get the correct pairings
-//! let correct_diagram = PersistenceDiagram {
-//! 	unpaired: HashSet::from_iter(vec![0, 13]),
-//! 	paired: HashSet::from_iter(vec![(1, 4), (2, 5), (3, 7), (6, 12), (8, 10), (9, 11)]),
-//! };
+//! let correct_diagram: PersistenceDiagram = [
+//! 	(0, Infinity),
+//! 	(13, Infinity),
+//! 	(1, Finite(4)),
+//! 	(2, Finite(5)),
+//! 	(3, Finite(7)),
+//! 	(6, Finite(12)),
+//! 	(8, Finite(10)),
+//! 	(9, Finite(11)),
+//! ]
+//! .into_iter()
+//! .collect();
 //! assert_eq!(computed_diagram, correct_diagram)
 //! ```
 

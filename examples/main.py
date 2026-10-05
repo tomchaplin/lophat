@@ -48,17 +48,12 @@ print("\nCustom:")
 print(dgm_custom)
 
 print("\nWith representatives:")
-dgm_with_reps = compute_pairings_with_reps(matrix)
-print("Paired: ", end="")
-print(dgm_with_reps.paired)
-print("Reps: ", end="")
-print(dgm_with_reps.paired_reps)
-print("Unpaired: ", end="")
-print(dgm_with_reps.unpaired)
-print("Reps: ", end="")
-print(dgm_with_reps.unpaired_reps)
+dgm_with_reps, representatives = compute_pairings_with_reps(matrix)
+print(dgm_with_reps)
+print("Representatives by birth:")
+print(representatives)
 
 assert dgm_iter == dgm_custom
 assert dgm_iter == dgm_list
-assert dgm_iter.paired == set(dgm_with_reps.paired)
-assert dgm_iter.unpaired == set(dgm_with_reps.unpaired)
+assert dgm_iter == dgm_with_reps
+assert dgm_with_reps.keys() == representatives.keys()
