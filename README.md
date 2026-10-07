@@ -44,6 +44,8 @@ cargo add lophat
 `ExtendedUsize::Finite(index)` represents a finite death; `ExtendedUsize::Infinity` represents an essential feature.
 Use `Decomposition::diagram()` or `PersistenceDiagram::from_decomposition()` to extract intervals, and `map_idxs()` to reindex their endpoints.
 
+Use `Decomposition::diagram_with_reps()` to obtain `(diagram, representatives)`, where `representatives` is a `Result<HashMap<usize, Vec<usize>>, NoVMatrixError>`. Set `LoPhatOptions::maintain_v = true` before reduction to retain the data needed for representatives. A successful map has the same birth keys as the diagram: finite intervals use the nonzero entries of R at death, and essential intervals use V at birth. These are cycle representatives for a valid filtered boundary matrix. An empty decomposition returns an empty diagram and `EmptyDecompositionError`; a nonempty decomposition without V returns its diagram and `VMatrixDiscardedError`.
+
 For usage, please consult [the Rust docs](https://docs.rs/lophat/latest/lophat/).
 
 ## Usage in Python

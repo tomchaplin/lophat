@@ -1,6 +1,22 @@
 # Changelog
 
-## 0.12.0 (unreleased)
+## 0.13.0 (unreleased)
+
+Changes since 0.12.0.
+
+- Add `Decomposition::diagram_with_reps` for Rust callers, returning the diagram
+  alongside a result containing representative cycles keyed by birth. Finite
+  intervals use R at death, while essential intervals use V at birth. Preserve
+  the diagram on V availability errors and document the decomposition's
+  uniform V availability invariant.
+- Use `Decomposition::diagram_with_reps` in `compute_pairings_with_reps`,
+  preserving the Python API's empty-input result and options behavior.
+- Document representative selection, its mathematical assumptions, and error
+  behavior, with a Rust usage example. Test cycle lifetimes across algorithms,
+  column types, clearing settings, and threading configurations; cover Python
+  empty-input results and both supplied `maintain_v` settings.
+
+## 0.12.0
 
 Changes since 0.11.0.
 

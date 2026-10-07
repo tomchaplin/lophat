@@ -1,7 +1,7 @@
 """Check birth-to-death dictionaries and representatives keyed by birth."""
 
 import pytest
-from lophat import compute_pairings, compute_pairings_with_reps
+from lophat import LoPhatOptions, compute_pairings, compute_pairings_with_reps
 
 
 @pytest.mark.parametrize("anti_transpose", [False, True])
@@ -45,20 +45,25 @@ def test_dictionary_equality_compares_births_and_deaths() -> None:
 	assert diagram != {0: None, 1: None}
 
 
+@pytest.mark.parametrize("maintain_v", [False, True])
 @pytest.mark.parametrize(
 	("matrix", "expected", "expected_representatives"),
 	[
 		([], {}, {}),
 		([(0, [])], {0: None}, {0: [0]}),
 		([(0, []), (0, []), (1, [0, 1])], {0: None, 1: 2}, {0: [0], 1: [0, 1]}),
+		([(1, []), (2, [0])], {0: 1}, {0: [0]}),
 	],
 )
 def test_representatives_are_keyed_by_birth(
 	matrix: list[tuple[int, list[int]]],
 	expected: dict[int, int | None],
 	expected_representatives: dict[int, list[int]],
+	*,
+	maintain_v: bool,
 ) -> None:
-	result = compute_pairings_with_reps(matrix)
+	options = LoPhatOptions(maintain_v=maintain_v, num_threads=1)
+	result = compute_pairings_with_reps(matrix, options)
 	assert isinstance(result, tuple)
 	assert len(result) == 2
 	diagram, representatives = result
@@ -67,6 +72,7 @@ def test_representatives_are_keyed_by_birth(
 	assert diagram == expected
 	assert representatives == expected_representatives
 	assert diagram.keys() == representatives.keys()
+	assert options.maintain_v is maintain_v
 
 
 def test_representative_results_are_independent() -> None:

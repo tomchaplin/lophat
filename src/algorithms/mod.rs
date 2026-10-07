@@ -2,12 +2,16 @@
 //!
 //! Use [`DecompositionAlgo`] to configure an algorithm, append input columns,
 //! and consume it to produce an `R = D V` decomposition. [`Decomposition`]
-//! provides access to R, optionally V, and the resulting persistence diagram.
+//! provides access to R, optionally V, the persistence diagram, and
+//! representative cycles.
 //! All arithmetic is over the field with two elements.
 
-use std::ops::Deref;
+use std::{collections::HashMap, ops::Deref};
 
-use crate::{columns::Column, utils::PersistenceDiagram};
+use crate::{
+	columns::Column,
+	utils::{ExtendedUsize, PersistenceDiagram},
+};
 
 mod lock_free;
 mod locking;
@@ -19,10 +23,10 @@ pub use serial::{SerialAlgorithm, SerialDecomposition};
 
 /// Reason a decomposition cannot supply a V column.
 ///
-/// Returned by [`Decomposition::get_v_col`] and [`Decomposition::has_v`]. An
-/// empty decomposition cannot reveal its original `maintain_v` setting, even
-/// if V was requested. A stored zero R column still makes a decomposition
-/// nonempty.
+/// Returned by [`Decomposition::get_v_col`], [`Decomposition::has_v`], and
+/// the representative result of [`Decomposition::diagram_with_reps`]. An empty
+/// decomposition cannot reveal its original `maintain_v` setting, even if V
+/// was requested. A stored zero R column still makes a decomposition nonempty.
 #[derive(Debug, PartialEq, Eq)]
 pub enum NoVMatrixError {
 	/// The decomposition has no columns, so V cannot be queried.
@@ -38,6 +42,13 @@ pub enum NoVMatrixError {
 /// immutable; the associated reference types may be ordinary references or
 /// guards owning access to parallel storage. [`Self::diagram`] uses R alone,
 /// so it works when V was discarded and when the decomposition is empty.
+/// [`Self::diagram_with_reps`] additionally extracts representative cycles
+/// when V is available.
+///
+/// V availability must be uniform across a nonempty decomposition: either
+/// every input column has a corresponding V column, or V is absent entirely.
+/// Once [`Self::has_v`] succeeds, [`Self::get_v_col`] must succeed for every
+/// valid column index.
 pub trait Decomposition<C>
 where
 	C: Column,
@@ -89,10 +100,108 @@ where
 	/// assumes a valid filtered boundary matrix.
 	fn diagram(&self) -> PersistenceDiagram { PersistenceDiagram::from_decomposition(self) }
 
+	/// Return the persistence diagram and a result containing representative
+	/// cycles.
+	///
+	/// The diagram is returned even when representatives are unavailable. On
+	/// success, the representative map has exactly the diagram's birth keys.
+	/// Each vector lists the nonzero input basis indices of a cycle, with
+	/// coefficient one over the field with two elements. Entry order follows
+	/// [`Column::entries`] and is not guaranteed by this method.
+	///
+	/// For a finite interval `(birth, death)`, the representative is column
+	/// `death` of R. For an essential interval `(birth, Infinity)`, it is
+	/// column `birth` of V. With a valid filtered boundary matrix D, reduced
+	/// R, and `R = D V` for an invertible, upper-triangular V that preserves
+	/// chain degrees, these cycles are supported at or before their births.
+	/// A finite cycle represents a nonzero homology class until `death`,
+	/// when it becomes a boundary; an essential cycle remains nonzero
+	/// through the supplied filtration. Representatives need not be minimal
+	/// or unique; reduction order can select different valid cycles.
+	///
+	/// This interpretation requires a square D with `D * D = 0`, boundary rows
+	/// preceding their columns, and correct chain degrees. These conditions
+	/// and the decomposition invariants are not validated. Results use the
+	/// decomposition's input basis; reindexing the returned diagram alone with
+	/// [`PersistenceDiagram::map_idxs`] does not reindex the representative
+	/// keys or their basis indices.
+	///
+	/// # Errors
+	///
+	/// The representative result is [`NoVMatrixError::EmptyDecompositionError`]
+	/// for an empty decomposition, alongside an empty diagram, regardless of
+	/// the original `maintain_v` setting. For a nonempty decomposition without
+	/// V, it is [`NoVMatrixError::VMatrixDiscardedError`]. V must be retained
+	/// even if every interval is finite and its representative uses R alone.
+	///
+	/// # Panics
+	///
+	/// Invalid decompositions may panic through column access, including
+	/// implementations that violate the trait's uniform V availability
+	/// invariant.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use std::collections::HashMap;
+	///
+	/// use lophat::{
+	/// 	algorithms::{Decomposition, DecompositionAlgo, SerialAlgorithm},
+	/// 	columns::VecColumn,
+	/// 	options::LoPhatOptions,
+	/// 	utils::ExtendedUsize::{Finite, Infinity},
+	/// };
+	///
+	/// let options = LoPhatOptions {
+	/// 	maintain_v: true,
+	/// 	..Default::default()
+	/// };
+	/// let matrix = [(0, vec![]), (0, vec![]), (1, vec![0, 1])];
+	/// let decomposition = SerialAlgorithm::init(Some(options))
+	/// 	.add_cols(matrix.into_iter().map(VecColumn::from))
+	/// 	.decompose();
+	/// let (diagram, representatives) = decomposition.diagram_with_reps();
+	/// assert_eq!(diagram[&0], Infinity);
+	/// assert_eq!(diagram[&1], Finite(2));
+	/// assert_eq!(
+	/// 	representatives.unwrap(),
+	/// 	HashMap::from([(0, vec![0]), (1, vec![0, 1])])
+	/// );
+	/// ```
+	fn diagram_with_reps(
+		&self,
+	) -> (
+		PersistenceDiagram,
+		Result<HashMap<usize, Vec<usize>>, NoVMatrixError>,
+	) {
+		let dgm = PersistenceDiagram::from_decomposition(self);
+
+		let reps = self.has_v().map(|_| {
+			dgm.iter()
+				.map(|(&birth, &death)| {
+					(
+						birth,
+						match death {
+							ExtendedUsize::Finite(death) => {
+								self.get_r_col(death).entries().collect()
+							},
+							ExtendedUsize::Infinity => {
+								self.get_v_col(birth).unwrap().entries().collect()
+							},
+						},
+					)
+				})
+				.collect()
+		});
+		(dgm, reps)
+	}
+
 	/// Report whether a nonempty decomposition retained V.
 	///
 	/// Returns `Ok(())` when V is available. This is a presence query, not a
-	/// Boolean method, and does not return the original options.
+	/// Boolean method, and does not return the original options. Success
+	/// guarantees V access for every valid column index by the trait's
+	/// uniform V availability invariant.
 	///
 	/// # Errors
 	///

@@ -23,9 +23,9 @@ mod inner {
 	#[pymodule_export]
 	pub use crate::options::LoPhatOptions;
 	use crate::{
-		algorithms::{Decomposition, DecompositionAlgo, LockFreeAlgorithm},
-		columns::{Column, VecColumn},
-		utils::{ExtendedUsize, PersistenceDiagram},
+		algorithms::{Decomposition, DecompositionAlgo, LockFreeAlgorithm, NoVMatrixError},
+		columns::VecColumn,
+		utils::PersistenceDiagram,
 	};
 
 	// Carry the accepted input shape into PyO3's introspection metadata without
@@ -143,21 +143,15 @@ Example::
 			let decomposition = LockFreeAlgorithm::init(options)
 				.add_cols(matrix_as_vec.into_iter())
 				.decompose();
-			let diagram = decomposition.diagram();
-			let representatives = diagram
-				.iter()
-				.map(|(&birth, &death)| {
-					let representative = match death {
-						ExtendedUsize::Finite(death) => {
-							decomposition.get_r_col(death).entries().collect()
-						},
-						ExtendedUsize::Infinity => {
-							decomposition.get_v_col(birth).unwrap().entries().collect()
-						},
-					};
-					(birth, representative)
-				})
-				.collect();
+			let (diagram, representatives) = decomposition.diagram_with_reps();
+			let representatives = match representatives {
+				Ok(representatives) => representatives,
+				// Preserve the Python API's empty-input result.
+				Err(NoVMatrixError::EmptyDecompositionError) => HashMap::new(),
+				Err(NoVMatrixError::VMatrixDiscardedError) => {
+					unreachable!("maintain_v is always enabled for representative computation")
+				},
+			};
 			Ok((diagram, representatives))
 		})
 	}
