@@ -65,6 +65,12 @@ Use `diagram[birth]` for lookup and `diagram.items()` to iterate over intervals.
 `compute_pairings_with_reps` returns `(diagram, representatives)`: the same birth-to-death dictionary and a second dictionary mapping each birth index to its representative cycle.
 A cycle is a list of nonzero input basis indices over the field with two elements. The two dictionaries have identical keys; use a birth key to match an interval to its representative.
 Empty input returns `({}, {})`.
+Rust bindings accepting diagrams use this same dictionary representation for
+inputs: births and finite deaths are nonnegative integer indices, and `None`
+marks an essential death. Invalid diagram keys or values raise `TypeError`, with the underlying type or
+integer range error available as its cause. Inputs are copied. Conversion does
+not check birth/death ordering or whether the diagram describes a valid filtered
+complex; those requirements belong to the receiving function.
 Both functions use the lockfree algorithm of [[1]](#1).
 Pass a `LoPhatOptions` object to configure the worker count, clearing, and other options; `num_threads=1` runs the same algorithm with one worker.
 

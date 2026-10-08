@@ -11,6 +11,10 @@ alone, or :py:func:`~lophat.compute_pairings_with_reps` for pairings and
 representative cycles. Customize either computation with
 :py:class:`~lophat.LoPhatOptions`.
 
+Diagrams use birth-to-death dictionaries, with nonnegative integer endpoints and
+``None`` for essential deaths. Keep this representation when passing a diagram
+to a function accepting diagrams; there is no separate diagram object to create.
+
 Input iterators are consumed once. Keep the matrix and its columns unchanged
 while a call reads them, and use a separate iterator for each concurrent call.
 Computations can run concurrently, including on free-threaded Python."#]

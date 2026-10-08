@@ -5,7 +5,12 @@ use std::{
 };
 
 #[cfg(feature = "python-module")]
-use pyo3::prelude::*;
+use pyo3::{
+	inspect::{PyStaticConstant, PyStaticExpr},
+	prelude::*,
+	type_hint_identifier,
+	type_hint_union,
+};
 
 use crate::{algorithms::Decomposition, columns::Column};
 
@@ -64,13 +69,37 @@ impl<'py> IntoPyObject<'py> for &ExtendedUsize {
 	fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> { (*self).into_pyobject(py) }
 }
 
+/// Extract a nonnegative integer index or an essential endpoint.
+///
+/// `None` becomes [`Self::Infinity`]; integer endpoints use the
+/// standard `usize` extraction, including its type and range errors.
+#[cfg(feature = "python-module")]
+impl<'py> FromPyObject<'_, 'py> for ExtendedUsize {
+	type Error = PyErr;
+
+	const INPUT_TYPE: pyo3::inspect::PyStaticExpr = type_hint_union!(
+		type_hint_identifier!("builtins", "int"),
+		PyStaticExpr::Constant {
+			value: PyStaticConstant::None
+		}
+	);
+
+	fn extract(obj: Borrowed<'_, 'py, PyAny>) -> Result<Self, Self::Error> {
+		Ok(match obj.extract::<Option<usize>>()? {
+			Some(index) => Finite(index),
+			None => Infinity,
+		})
+	}
+}
+
 /// Map each feature's birth index to its death index or infinity.
 ///
 /// Finite deaths use [`ExtendedUsize::Finite`]; essential features use
 /// [`ExtendedUsize::Infinity`]. Indices refer to the input basis, not
 /// filtration values. Each birth appears once, and death columns are not
 /// separate keys. The map has no specified iteration order. Its display is
-/// sorted by birth.
+/// sorted by birth. Direct construction does not validate interval lifetimes
+/// or compatibility with a filtered chain complex.
 ///
 /// Construct directly from a [`HashMap`], collect `(birth, death)` entries, or
 /// extract from a reduced matrix with [`Self::from_decomposition`]. [`Deref`]
@@ -90,7 +119,10 @@ impl<'py> IntoPyObject<'py> for &ExtendedUsize {
 /// assert_eq!(diagram[&1], Finite(2));
 /// assert_eq!(diagram.to_string(), "{0: Inf, 1: 2}");
 /// ```
-#[cfg_attr(feature = "python-module", derive(IntoPyObject, IntoPyObjectRef))]
+#[cfg_attr(
+	feature = "python-module",
+	derive(FromPyObject, IntoPyObject, IntoPyObjectRef)
+)]
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct PersistenceDiagram(
 	/// Birth-to-death entries; keys identify features uniquely.
@@ -297,5 +329,103 @@ mod tests {
 		);
 		assert_eq!(mapped.to_string(), "{5: 8, 6: Inf}");
 		assert_eq!(original[&0], Finite(3));
+	}
+}
+
+#[cfg(all(test, feature = "python-module"))]
+mod python_conversion_tests {
+	use ExtendedUsize::{Finite, Infinity};
+	use pyo3::{
+		exceptions::{PyOverflowError, PyTypeError},
+		prelude::*,
+		types::PyDict,
+	};
+
+	use super::{ExtendedUsize, PersistenceDiagram};
+
+	/// Essential and finite endpoints, including the full usize range,
+	/// round-trip.
+	#[test]
+	fn endpoints_round_trip() {
+		Python::initialize();
+		Python::attach(|py| {
+			for expected in [Infinity, Finite(0), Finite(usize::MAX)] {
+				let value = expected.into_pyobject(py).unwrap();
+				assert_eq!(value.extract::<ExtendedUsize>().unwrap(), expected);
+			}
+		});
+	}
+
+	/// Invalid types and out-of-range indices retain the standard extraction
+	/// errors.
+	#[test]
+	fn invalid_endpoints_report_python_errors() {
+		Python::initialize();
+		Python::attach(|py| {
+			for expression in [c"'1'", c"1.0", c"[]"] {
+				let value = py.eval(expression, None, None).unwrap();
+				let error = value.extract::<ExtendedUsize>().unwrap_err();
+				assert!(error.is_instance_of::<PyTypeError>(py));
+			}
+			for expression in [c"-1", c"1 << 256"] {
+				let value = py.eval(expression, None, None).unwrap();
+				let error = value.extract::<ExtendedUsize>().unwrap_err();
+				assert!(
+					error.is_instance_of::<PyOverflowError>(py),
+					"{expression:?}: {error:?}"
+				);
+			}
+		});
+	}
+
+	/// Newtype extraction accepts a dictionary directly and preserves
+	/// independent copies.
+	#[test]
+	fn diagrams_extract_from_dictionaries() {
+		Python::initialize();
+		Python::attach(|py| {
+			let empty = PyDict::new(py).extract::<PersistenceDiagram>().unwrap();
+			assert!(empty.is_empty());
+			let value = py.eval(c"{0: None, 1: 2}", None, None).unwrap();
+			let diagram = value.extract::<PersistenceDiagram>().unwrap();
+			assert_eq!(
+				diagram,
+				[(0, Infinity), (1, Finite(2))].into_iter().collect()
+			);
+			let round_trip = (&diagram).into_pyobject(py).unwrap();
+			assert_eq!(round_trip.extract::<PersistenceDiagram>().unwrap(), diagram);
+			value.cast::<PyDict>().unwrap().clear();
+			assert_eq!(diagram.len(), 2);
+		});
+	}
+
+	/// Dictionary structure is checked while mathematical lifetime checks
+	/// remain with callers.
+	#[test]
+	fn diagrams_validate_types_but_not_lifetimes() {
+		Python::initialize();
+		Python::attach(|py| {
+			for expression in [c"[]", c"{'0': None}", c"{0: '2'}", c"{0: 2.0}"] {
+				let value = py.eval(expression, None, None).unwrap();
+				let error = value.extract::<PersistenceDiagram>().unwrap_err();
+				assert!(error.is_instance_of::<PyTypeError>(py));
+			}
+			for expression in [c"{-1: None}", c"{0: -1}", c"{0: 1 << 256}"] {
+				let value = py.eval(expression, None, None).unwrap();
+				let error = value.extract::<PersistenceDiagram>().unwrap_err();
+				assert!(error.is_instance_of::<PyTypeError>(py));
+				assert!(
+					error
+						.cause(py)
+						.unwrap()
+						.is_instance_of::<PyOverflowError>(py)
+				);
+			}
+			let value = py.eval(c"{1: 0}", None, None).unwrap();
+			assert_eq!(
+				value.extract::<PersistenceDiagram>().unwrap()[&1],
+				Finite(0)
+			);
+		});
 	}
 }

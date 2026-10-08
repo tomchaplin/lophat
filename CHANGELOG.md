@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.14.0
+
+Changes since 0.13.0.
+
+- Add feature-gated `FromPyObject` conversions for `ExtendedUsize` and
+  `PersistenceDiagram`. Nonnegative integer endpoints become `Finite(index)`;
+  `None` becomes `Infinity`. Diagrams are accepted directly as
+  `dict[int, int | None]`, matching their existing output representation.
+- Preserve standard type and integer range errors for endpoint extraction and
+  provide input type metadata for generated bindings. Derived diagram extraction
+  adds a contextual `TypeError`, with the original failure as its cause.
+  Conversion copies dictionaries; subsequent edits do not change the extracted diagram. Interval lifetimes and
+  mathematical consistency remain caller requirements rather than extraction
+  checks.
+- Document dictionary input conventions and test empty and mixed diagrams,
+  endpoint round trips, the full index range, invalid keys and values, and
+  independence from the original dictionary.
+
 ## 0.13.0
 
 Changes since 0.12.0.
