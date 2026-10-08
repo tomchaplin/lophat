@@ -77,27 +77,87 @@ Pass a `LoPhatOptions` object to configure the worker count, clearing, and other
 For more details, please consult [the Python docs](https://lophat.readthedocs.io/en/latest/).
 For example usage, see `examples/main.py` or [this Google colab notebook](https://colab.research.google.com/drive/1y0_wZfvuUZfRreYPO50mo4rBlflkMcfj?usp=sharing).
 
-## Building documentation and type stubs
+## Development environment and source builds
 
-With a virtual environment active and Maturin 1.15 or newer installed, build the extension and generate its type stubs with:
+Install [Rust through rustup](https://rustup.rs/),
+[uv](https://docs.astral.sh/uv/getting-started/installation/), and
+[Lefthook](https://lefthook.dev/installation/). A native C linker is also
+required (for example, the build tools for your operating system). Run the
+following commands from the repository root:
 
-```shell
-maturin develop --generate-stubs
+```sh
+rustup toolchain install stable
+rustup toolchain install nightly --component rustfmt
+uv python pin 3.12
+uv sync --locked --group test
+lefthook install
 ```
 
-For distributable wheels, use `maturin build --generate-stubs`. The release workflow supplies this flag automatically. Generated `.pyi` files are build artifacts; do not maintain a separate handwritten stub.
+uv creates `.venv`, installs the development and test tools, and builds the
+Python extension from source. Python 3.12 or newer is required; pin another
+supported version if desired. The Git pre-commit hooks run nightly
+rustfmt, Tombi, and Ruff, and stage their formatting changes. You can also run
+them manually with `lefthook run pre-commit`.
+
+Rebuild the extension and its generated type stubs after Rust or docstring
+changes, then run the Python tests:
+
+```sh
+uv run --no-sync maturin develop --locked --generate-stubs
+uv run --no-sync python -m pytest
+```
+
+Install the optional benchmark dependencies with
+`uv sync --locked --group test --group benchmark` to run the benchmark tests too.
+
+Build a distributable wheel into `dist/` with:
+
+```sh
+uv run --no-sync maturin build --locked --release --generate-stubs --out dist
+```
+
+For the Rust library without Python bindings, use:
+
+```sh
+cargo build --locked --release --no-default-features --features local_thread_pool,serde
+cargo test --locked --no-default-features --features local_thread_pool,serde
+```
+
+## Building documentation and type stubs
+
+After setting up the development environment, build the extension and generate its type stubs with:
+
+```shell
+uv run --no-sync maturin develop --locked --generate-stubs
+```
+
+For distributable wheels, use the source-build command above. The release workflow supplies this flag automatically. Generated `.pyi` files are build artifacts; do not maintain a separate handwritten stub.
 
 Rust APIs use ordinary inline Markdown doc comments (`///`), which rustfmt formats, including code examples. Shared APIs supply Python documentation through `#[doc = python_doc!(r#"Python reStructuredText"#)]` attributes; rustfmt skips these macro invocations to preserve their indentation.
 
 Before PyO3 processes a shared class, `#[pymethods]` block, or inline Python module, a conditional `macro_rules_apply(strip_rust_docs!)` pass removes Rust doc comments, including those on fields and methods. Both the adapter alias and the stripping macro live in `src/utils/mod.rs`; the adapter comes from the optional `macro_rules_attribute` dependency. The stripping pass is disabled for Rustdoc, local rust-analyzer analysis, and builds without `python-module`. In those contexts, `python_doc!` expands to an empty string. Extension builds retain the Python documentation for runtime docstrings and generated stubs. The recursive stripping macro uses a crate recursion limit of 1024.
 
-Build the Rust reference with `cargo doc --no-deps`. After installing Sphinx and `sphinx-rtd-theme` in the same Python environment as the extension, build the Python reference with:
+Install the Python documentation dependencies into the project environment,
+rebuild the extension, and generate the HTML reference:
 
-```shell
-python -m sphinx -W -b html docs docs/_build/html
+```sh
+uv sync --locked --group test --group docs
+uv run --no-sync maturin develop --locked --generate-stubs
+uv run --no-sync python -m sphinx -W --keep-going -b html docs docs/_build/html
 ```
 
-Sphinx reads the installed extension's docstrings, so rebuild the extension after editing them.
+Open `docs/_build/html/index.html` in a browser. Sphinx reads the installed
+extension's docstrings, so rebuild the extension after editing them. The build
+treats warnings as errors. The existing Makefile is also available through
+`uv run --no-sync make -C docs html SPHINXOPTS="-W --keep-going"`.
+
+Build and open the Rust reference with:
+
+```sh
+cargo doc --locked --no-default-features --features local_thread_pool,serde --no-deps --open
+```
+
+The generated reference is at `target/doc/lophat/index.html`.
 
 ## Publishing Rust releases
 

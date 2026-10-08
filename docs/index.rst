@@ -4,7 +4,9 @@ Python bindings
 LoPhat computes persistence pairings over the field with two elements.
 Build and install the extension before building this reference::
 
-    maturin develop --generate-stubs
+    uv sync --locked --group test --group docs
+    uv run --no-sync maturin develop --locked --generate-stubs
+    uv run --no-sync python -m sphinx -W --keep-going -b html docs docs/_build/html
 
 The API documentation below is read from the installed extension's docstrings.
 Type stubs are generated from the same bindings. For implementation details,

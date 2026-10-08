@@ -4,6 +4,9 @@
 
 Changes since 0.13.0.
 
+- Document uv environment setup, Lefthook installation, source builds, and
+  local Rust and Python documentation builds. Add a locked Sphinx dependency
+  group and include Maturin in the development tools.
 - Add feature-gated `FromPyObject` conversions for `ExtendedUsize` and
   `PersistenceDiagram`. Nonnegative integer endpoints become `Finite(index)`;
   `None` becomes `Infinity`. Diagrams are accepted directly as
