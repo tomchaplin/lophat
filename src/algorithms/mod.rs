@@ -23,10 +23,14 @@ pub use serial::{SerialAlgorithm, SerialDecomposition};
 
 /// Reason a decomposition cannot supply a V column.
 ///
-/// Returned by [`Decomposition::get_v_col`], [`Decomposition::has_v`], and
-/// the representative result of [`Decomposition::diagram_with_reps`]. An empty
-/// decomposition cannot reveal its original `maintain_v` setting, even if V
-/// was requested. A stored zero R column still makes a decomposition nonempty.
+/// Returned by [`Decomposition::get_v_col`] and [`Decomposition::has_v`]. An
+/// empty decomposition cannot reveal its original `maintain_v` setting, even
+/// if V was requested. A stored zero R column still makes a decomposition
+/// nonempty.
+///
+/// [`Decomposition::diagram_with_reps`] can return
+/// [`Self::VMatrixDiscardedError`] for a nonempty decomposition, but succeeds
+/// with an empty representative map for an empty decomposition.
 #[derive(Debug, PartialEq, Eq)]
 pub enum NoVMatrixError {
 	/// The decomposition has no columns, so V cannot be queried.
@@ -105,9 +109,12 @@ where
 	///
 	/// The diagram is returned even when representatives are unavailable. On
 	/// success, the representative map has exactly the diagram's birth keys.
-	/// Each vector lists the nonzero input basis indices of a cycle, with
-	/// coefficient one over the field with two elements. Entry order follows
-	/// [`Column::entries`] and is not guaranteed by this method.
+	/// An empty decomposition returns an empty diagram and `Ok` containing an
+	/// empty representative map, regardless of the original `maintain_v`
+	/// setting. Each vector lists the nonzero input basis indices of a
+	/// cycle, with coefficient one over the field with two elements. Entry
+	/// order follows [`Column::entries`] and is not guaranteed by this
+	/// method.
 	///
 	/// For a finite interval `(birth, death)`, the representative is column
 	/// `death` of R. For an essential interval `(birth, Infinity)`, it is
@@ -128,11 +135,10 @@ where
 	///
 	/// # Errors
 	///
-	/// The representative result is [`NoVMatrixError::EmptyDecompositionError`]
-	/// for an empty decomposition, alongside an empty diagram, regardless of
-	/// the original `maintain_v` setting. For a nonempty decomposition without
-	/// V, it is [`NoVMatrixError::VMatrixDiscardedError`]. V must be retained
-	/// even if every interval is finite and its representative uses R alone.
+	/// The representative result is [`NoVMatrixError::VMatrixDiscardedError`]
+	/// for a nonempty decomposition without V. Nonempty decompositions require
+	/// V to be retained even if every interval is finite and its representative
+	/// uses R alone.
 	///
 	/// # Panics
 	///
@@ -167,6 +173,13 @@ where
 	/// 	representatives.unwrap(),
 	/// 	HashMap::from([(0, vec![0]), (1, vec![0, 1])])
 	/// );
+	///
+	/// // Empty decompositions succeed even when V was not requested.
+	/// let empty = SerialAlgorithm::<VecColumn>::init(None).decompose();
+	/// assert_eq!(
+	/// 	empty.diagram_with_reps(),
+	/// 	(Default::default(), Ok(HashMap::new()))
+	/// );
 	/// ```
 	fn diagram_with_reps(
 		&self,
@@ -193,7 +206,11 @@ where
 				})
 				.collect()
 		});
-		(dgm, reps)
+		let representatives = match reps {
+			Err(NoVMatrixError::EmptyDecompositionError) => Ok(HashMap::new()),
+			r => r,
+		};
+		(dgm, representatives)
 	}
 
 	/// Report whether a nonempty decomposition retained V.

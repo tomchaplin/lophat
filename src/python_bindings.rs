@@ -27,7 +27,7 @@ mod inner {
 	#[pymodule_export]
 	pub use crate::options::LoPhatOptions;
 	use crate::{
-		algorithms::{Decomposition, DecompositionAlgo, LockFreeAlgorithm, NoVMatrixError},
+		algorithms::{Decomposition, DecompositionAlgo, LockFreeAlgorithm},
 		columns::VecColumn,
 		utils::PersistenceDiagram,
 	};
@@ -148,14 +148,8 @@ Example::
 				.add_cols(matrix_as_vec.into_iter())
 				.decompose();
 			let (diagram, representatives) = decomposition.diagram_with_reps();
-			let representatives = match representatives {
-				Ok(representatives) => representatives,
-				// Preserve the Python API's empty-input result.
-				Err(NoVMatrixError::EmptyDecompositionError) => HashMap::new(),
-				Err(NoVMatrixError::VMatrixDiscardedError) => {
-					unreachable!("maintain_v is always enabled for representative computation")
-				},
-			};
+			let representatives = representatives
+				.expect("maintain_v is always enabled for representative computation");
 			Ok((diagram, representatives))
 		})
 	}

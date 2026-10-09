@@ -214,12 +214,16 @@ fn check_representative_errors<A: DecompositionAlgo<VecColumn, Options = LoPhatO
 			..Default::default()
 		};
 		let empty = A::init(Some(options)).decompose();
+		let empty_result = empty.diagram_with_reps();
 		assert_eq!(
-			empty.diagram_with_reps(),
-			(
-				PersistenceDiagram::default(),
-				Err(NoVMatrixError::EmptyDecompositionError)
-			)
+			empty_result,
+			(PersistenceDiagram::default(), Ok(HashMap::new()))
+		);
+		assert_eq!(empty.has_v(), Err(NoVMatrixError::EmptyDecompositionError));
+		#[cfg(feature = "serde")]
+		assert_eq!(
+			lophat::utils::clone_to_file_format(&empty).diagram_with_reps(),
+			empty_result
 		);
 		let nonempty = A::init(Some(options))
 			.add_cols(std::iter::once(VecColumn::from((0, vec![]))))

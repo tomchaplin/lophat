@@ -4,6 +4,14 @@
 
 Changes since 0.13.0.
 
+- Return an empty diagram and `Ok` containing an empty representative map from
+  `Decomposition::diagram_with_reps` for empty decompositions, regardless of
+  `maintain_v`. Nonempty decompositions without V still report
+  `VMatrixDiscardedError`; `has_v` and `get_v_col` still report
+  `EmptyDecompositionError` for empty decompositions. Simplify the Python
+  binding to use this behavior directly while preserving its `({}, {})` result.
+  Update Rust documentation and regression tests across algorithms and
+  file-format decompositions.
 - Document uv environment setup, Lefthook installation, source builds, and
   local Rust and Python documentation builds. Add a locked Sphinx dependency
   group and include Maturin in the development tools.
