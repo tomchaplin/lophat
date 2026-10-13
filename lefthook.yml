@@ -46,7 +46,7 @@ pre-commit:
   jobs:
     - run: cargo +nightly fmt
       stage_fixed: true
-    - run: uv run tombi format
+    - run: uv run --no-sync tombi format
       stage_fixed: true
-    - run: uv run ruff format
+    - run: uv run --no-sync ruff format
       stage_fixed: true
