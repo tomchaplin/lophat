@@ -2,9 +2,11 @@
 name = "lophat"
 requires-python = ">=3.12"
 classifiers = [
+	"Intended Audience :: Science/Research",
+	"Programming Language :: Python :: 3",
 	"Programming Language :: Python :: Implementation :: CPython",
-	"Programming Language :: Python :: Implementation :: PyPy",
 	"Programming Language :: Rust",
+	"Topic :: Scientific/Engineering :: Mathematics",
 ]
 dynamic = ["version"]
 
