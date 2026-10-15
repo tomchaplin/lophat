@@ -35,6 +35,7 @@ requires = ["maturin~=1.15"]
 build-backend = "maturin"
 
 [tool.maturin]
+include = [{ path = "Cargo.lock", format = "sdist" }]
 locked = true
 profile = "release"
 
@@ -113,5 +114,5 @@ allow-multiline = true
 indent-style = "tab"
 line-width = 100
 
-[tool.uv.config-settings]
-"maturin.build-args" = "--generate-stubs"
+[tool.uv.config-settings-package]
+lophat = { "maturin.build-args" = "--generate-stubs" }
